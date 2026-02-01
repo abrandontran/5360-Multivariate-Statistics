@@ -9,9 +9,10 @@ format: pdf
 
 
 
-```{r, message = FALSE,}
+```{r, message = FALSE}
 library(tidyverse)
 library(knitr)
+library(kableExtra)
 library(haven)
 library(corrplot)
 library(PerformanceAnalytics)
@@ -85,9 +86,10 @@ variables are defined as the sum of each nested question:
     1. Feeling nervous, anxious or on edge
     2. Not being able to stop or control worrying
     3. Worrying too much about different things
-    4. Trouble relaxingBecoming easily annoyed or irritable
-    5. Being so restless that it’s hard to sit still
-    6. Feeling afraid as if something awful might happen
+    4. Trouble relaxing
+    5. Becoming easily annoyed or irritable
+    6. Being so restless that it’s hard to sit still
+    7. Feeling afraid as if something awful might happen
     
 - **`lonesc`:** Please answer the following: *(min $= 3$, max $= 9$)*
     1. How often do you feel that you lack companionship?
@@ -103,10 +105,10 @@ variables are defined as the sum of each nested question:
 
 Omitting NAs, we fall from $84,735$ to $68,062$ unique responses to each of the
 above modules. With our variables defined, we proceed to load in our data for
-subseqent analyses.
+subsequent analyses.
 
 ```{r, cache = TRUE}
-hms_data <- read_sav("data/hms_data.sav", encoding = 'latin1')
+hms_data <- read_sav("../data/hms_data.sav", encoding = 'latin1')
 ```
 
 ```{r, cache = TRUE}
@@ -138,8 +140,8 @@ Our initial correlation plot suggests strong linear relationships between our
 composite variables. Observe the dark reds and blues: there appears to be a 
 distinct cluster of positive correlations between depression  (`deprawsc`), 
 anxiety (`anx_score`), and loneliness (`lonesc`), which  are all strongly 
-negatively coordinated with flourishing (`flourish`). The strength of these 
-coefficients (generally, $r > \mid 0.5 \mid $) suggests that the data exhibits 
+negatively correlated with flourishing (`flourish`). The strength of these 
+coefficients (generally, $r > \mid 0.5 \mid$) suggests that the data exhibits 
 linearity, making it a strong  candidate for PCA. However, we  will create a 
 matrix plot to specifically confirm high-dimensional linearity.
 
@@ -172,8 +174,7 @@ chart.Correlation(pca_plot_sample)
 The trends we see across flourishing, depression, anxiety, and loneliness
 remain consistent with earlier analyses, with added specificity on statistically
 significant relationships ($p < 0.001$).  The relationships between `flourish`
-and both `deprawsc` and `anx_score` appear to be slightly nonlinear when
-when viewed via LOESS curves, whereas the relationship between `deprawsc` and
+and both `deprawsc` and `anx_score` appear to be slightly nonlinear when viewed via LOESS curves, whereas the relationship between `deprawsc` and
 `anx_score` remains highly linear. The LOESS curves for relationships with
 `ed_sde` and `lonesc` appear roughly linear, though with a potential quadratic
 component. Before considering transformations, we test for multivariate
@@ -185,8 +186,8 @@ cqplot(pca_data, main = "Chi-Square Q-Q Plot for Raw Data")
 
 We see strong structure and skewness in the Q-Q plot, suggesting that the data
 are not multivariate normal. At the cost of interpretability, we transform the
-variables, not only to attain multivariate normality (which is not required for
-PCA), but also to hopefully improve linearity and reduce outlier influence.
+variables, not only to hopefully attain multivariate normality (which is not 
+required for PCA), but to improve linearity and reduce outlier influence.
 
 
 ## Data Transformations
@@ -240,14 +241,14 @@ We presented a variety of correlation plots in Part 1 as part of our EDA but
 reproduce key visualizations here for post-transformation analysis. To begin,
 we present a side-by-side comparison of correlations by variable pair before
 and after transformations. For the grader's ease of review, we omit the code
-for this table and render results via `echo = FALSE`.
+for this table and render results via `echo = FALSE` (see Table 1).
 
-```{r}
+```{r, echo = FALSE}
 corr_matrix_2 <- cor(pca_data_transform)
 lower_tri_idx <- lower.tri(corr_matrix)
 
 comparison_table <- data.frame(
-  Pair = paste(rownames(corr_matrix)[row(corr_matrix)[lower_tri_idx]], 
+  Pair = paste(rownames(corr_matrix_2)[row(corr_matrix_2)[lower_tri_idx]], 
                "vs", 
                colnames(corr_matrix)[col(corr_matrix)[lower_tri_idx]]),
   Original = corr_matrix[lower_tri_idx],
@@ -260,7 +261,8 @@ kable(comparison_table,
       digits = 3,
       format = "latex", 
       booktabs = TRUE, 
-      caption = "Correlation Comparison (Pre vs. Post Transformation)")
+      caption = "Correlation Comparison (Pre vs. Post Transformation)") %>%
+    kable_styling(latex_options = "HOLD_position")
 ```
 
 Evidently, there is a general increase in correlation with every pair of
@@ -277,7 +279,7 @@ with a strong, positive $r=0.76$ between anxiety and depression. Flourishing is
 inversely correlated to all other metrics, as expected, and eating disorder
 remains loosely correlated. Based on these correlations, combined with the
 aforementioned ratio of $n=68,062$ observations against $p=5$ variables (a
-subject-to-variable ratio of over $13,600:1$), PCA is expected to perform well.
+response-to-variable ratio of over $13,600:1$), PCA is expected to perform well.
 The strong correlations indicate that a large proportion of the total variance
 is shared, and as observed in Part 1, the relationships mostly appear to be
 linear. Thus, we feel comfortable proceeding with PCA.
@@ -314,7 +316,7 @@ screeplot(pca, type = "lines", col = "red", lwd = 2, pch = 19, cex = 1.2,
 ```
 
 There is a clear elbow after the first principal component, which suggests
-keeping only PC1, just as suggested by the ``eigenvalue $>1$'' rule. We do not
+keeping only PC1, just as suggested by the ``eigenvalue $>1$"" rule. We do not
 perform parallel analysis, as our data violate the multivariate normality
 assumption (see Part 1). While we would need three principal components to
 explain $>80\%$ of the variance, we proceed with only PC1 based on the two
@@ -356,13 +358,14 @@ loneliness, and eating disorders.
 # Part 5 | Further Analysis
 
 ```{r}
-ciscoreplot(pca, c(1, 2), pca_data_transform)
+# Pass in empty row names as they will be unintelligible with so many points.
+ciscoreplot(pca, c(1, 2), rep("", nrow(pca_data_transform)))
 ```
 
 The score plot reveals a single, continuous cloud of data points with no
-distinct sub-groupings, suggesting that psychologicl health amongst students
+distinct sub-groupings, suggesting that psychological health amongst students
 varies along a continuum rather than categorical types. The superimposed $95\%$
-confidence ellipse highlights a signficant deviation from multivariate
+confidence ellipse highlights a significant deviation from multivariate
 normality, which we expect, driven by a heavy tail of outliers on the negative
 end of PC1. Based on our loading analysis, where negative PC1 scores correspond
 to high depression, anxiety, and loneliness, these outliers represent students
@@ -394,3 +397,38 @@ variance explained ($17\%$).
 
 
 # Part 6 | Conclusion and Discussion
+Principal component analysis proved to be an effective tool for dimensionality
+reduction on the 2024--2025 HMS dataset (from which we selected five key
+composite variables that summarized series of questions pertaining to
+flourishing, depression, anxiety, loneliness, and eating disorders). We
+condensed the five variables into a single component that generally reflects
+psychological health (a higher score is tied to flourishing, whereas a lower
+score is tied to the remaining negative psychological conditions).
+
+We determined the data to be eligible for PCA during exploratory data
+analysis because scatterplots, mixed correlation plots, and matrix plots
+revealed strong linear correlations. We enhanced linearity (and incidentally,
+correlation) by performing transformations on some of our variables, including
+square root and power transformations, with corrections for our Likert-scaled
+data that included a significant number of `0` responses. While the Chi-Square
+Q-Q plot revealed that transformations did not resolve our lack of multivariate
+normality, we proceeded as (1) MVN is not a requirement for PCA and (2) we were
+satisfied with the response-to-variable ratio of over $13,600:1$.
+
+The loadings that resulted from our PCA helped confirm the story behind our
+variables. PC1 was abundantly clear: the loadings and biplot confirmed an
+inverse relationship between flourishing and the other negative psychological
+conditions, explaining $56\%$ of the variability in our data. We elected to
+stop here under the principle of parsimony, as well as the technical thresholds
+we satisfied (eigenvalue $>1$ and scree plot). However, further analysis of PC2
+revealed a disparate relationship with eating disorders and the other variables.
+Namely, an increase in ED score did not necessarily mean a similar increase in
+psychological health (measured by PC1). Further analysis could be warranted on
+the impact of ED symptoms in future assignments.
+
+Finally, while we do not fully trust the $95\%$ confidence ellipse due to the
+lack of multivariate normality in our data, we note that outliers here do imply
+meaningful differences from the response mean. We could operationalize this to
+encourage schools to provide heightened emotional support for students who
+are identified as outliers, as their responses reflect that they are far behind
+their peers in terms of psychological health.
