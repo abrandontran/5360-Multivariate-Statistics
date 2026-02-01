@@ -353,6 +353,44 @@ loneliness, and eating disorders.
 
 
 
+# Part 5 | Further Analysis
+
 ```{r}
 ciscoreplot(pca, c(1, 2), pca_data_transform)
 ```
+
+The score plot reveals a single, continuous cloud of data points with no
+distinct sub-groupings, suggesting that psychologicl health amongst students
+varies along a continuum rather than categorical types. The superimposed $95\%$
+confidence ellipse highlights a signficant deviation from multivariate
+normality, which we expect, driven by a heavy tail of outliers on the negative
+end of PC1. Based on our loading analysis, where negative PC1 scores correspond
+to high depression, anxiety, and loneliness, these outliers represent students
+with severe psychological distress.
+
+While the violation of multivariate normality suggests that the $95\%$
+probability boundary is imperfect, we can more easily identify extreme points
+that are statistically far from the average student profile and potentially
+distribute critical care accordingly.
+
+Note: the presentation and analysis of the biplot in the context of PC1 can be 
+found in Part 4. If we interpret it in the context of both PC1 and PC2, we see
+the same near direct inverse relationship between flourishing versus loneliness, 
+depression, and anxiety, but we see that the presentation of an eating disorder
+acts somewhat perpendicularly to this relationship. This is mirrored in the PC2
+loadings, which very heavily penalize `ed_sde`, alongside `flourish_sq`. It
+appears that eating disorders have a unique variance structure that doesn't
+perfectly align with that of depression, anxiety, and loneliness. That is, a
+student with a high ED score may not necessarily suffer from low flourishing,
+high loneliness, and so on.
+
+While this an interesting dimension to explore, we ultimately refrain from
+including PC2 in our analysis because its eigenvalue of $0.85$ indicates PC2
+explains less variance than a single original variable. Similarly, the scree
+plot is sharp and unambiguous after PC1, and under the principle of parsimony,
+we avoid doubling the complexity of our model for a relatively small gain in
+variance explained ($17\%$).
+
+
+
+# Part 6 | Conclusion and Discussion
