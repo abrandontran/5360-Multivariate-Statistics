@@ -11,6 +11,7 @@ format: pdf
 
 ```{r, message = FALSE,}
 library(tidyverse)
+library(knitr)
 library(haven)
 library(corrplot)
 library(PerformanceAnalytics)
@@ -105,7 +106,7 @@ above modules. With our variables defined, we proceed to load in our data for
 subseqent analyses.
 
 ```{r, cache = TRUE}
-hms_data <- read_sav("../data/hms_data.sav", encoding = 'latin1')
+hms_data <- read_sav("data/hms_data.sav", encoding = 'latin1')
 ```
 
 ```{r, cache = TRUE}
@@ -187,6 +188,9 @@ are not multivariate normal. At the cost of interpretability, we transform the
 variables, not only to attain multivariate normality (which is not required for
 PCA), but also to hopefully improve linearity and reduce outlier influence.
 
+
+## Data Transformations
+
 Given the output in our `PerformanceAnalytics` plot, we propose the following
 transformations:
 
@@ -212,6 +216,9 @@ pca_data_transform <- pca_data %>%
 We review the same Chi-Square Q-Q and correlation plots for our transformed
 data.
 
+
+## Multivariate Normality
+
 ```{r}
 cqplot(pca_data_transform, main = "Chi-Square Q-Q Plot for Transformed Data")
 chart.Correlation(slice_sample(pca_data_transform, n = 5000))
@@ -224,3 +231,117 @@ given our large sample size, high correlations, and high-dimensional linearity.
 As an aside, we also considered a log transformation of `deprawsc` and 
 `anx_score` but found that this introduced new  artifacts due to the discrete 
 nature of the data and generally over-corrected.
+
+
+
+# Part 2 | Correlations
+
+We presented a variety of correlation plots in Part 1 as part of our EDA but 
+reproduce key visualizations here for post-transformation analysis. To begin,
+we present a side-by-side comparison of correlations by variable pair before
+and after transformations. For the grader's ease of review, we omit the code
+for this table and render results via `echo = FALSE`.
+
+```{r}
+corr_matrix_2 <- cor(pca_data_transform)
+lower_tri_idx <- lower.tri(corr_matrix)
+
+comparison_table <- data.frame(
+  Pair = paste(rownames(corr_matrix)[row(corr_matrix)[lower_tri_idx]], 
+               "vs", 
+               colnames(corr_matrix)[col(corr_matrix)[lower_tri_idx]]),
+  Original = corr_matrix[lower_tri_idx],
+  Transformed = corr_matrix_2[lower_tri_idx]
+)
+
+comparison_table$Change <- comparison_table$Transformed - comparison_table$Original
+
+kable(comparison_table, 
+      digits = 3,
+      format = "latex", 
+      booktabs = TRUE, 
+      caption = "Correlation Comparison (Pre vs. Post Transformation)")
+```
+
+Evidently, there is a general increase in correlation with every pair of
+variables, aside from `ed_sde` versus `lonesc`, where the correlation remains
+unchanged because the variables, themselves, were not transformed. We present a
+visualization of the transformed correlations for ease of analysis.
+
+```{r}
+corrplot.mixed(corr_matrix_2, lower = "number", upper = "ellipse")
+```
+
+Again, the correlation structure indicates high multicollinearity, particularly
+with a strong, positive $r=0.76$ between anxiety and depression. Flourishing is
+inversely correlated to all other metrics, as expected, and eating disorder
+remains loosely correlated. Based on these correlations, combined with the
+aforementioned ratio of $n=68,062$ observations against $p=5$ variables (a
+subject-to-variable ratio of over $13,600:1$), PCA is expected to perform well.
+The strong correlations indicate that a large proportion of the total variance
+is shared, and as observed in Part 1, the relationships mostly appear to be
+linear. Thus, we feel comfortable proceeding with PCA.
+
+
+
+# Part 3 | Principal Component Analysis
+
+We begin by analyzing total variance by a given number of principal
+components.
+
+```{r}
+pca <- prcomp(pca_data_transform, scale. = T)
+
+summary.PCA.JDRS <- function(x){
+  sum_JDRS <- summary(x)$importance
+  sum_JDRS[1, ] <- sum_JDRS[1, ]^2
+  attr(sum_JDRS, "dimnames")[[1]][1] <- "Eigenvals (Variance)"
+  sum_JDRS
+}
+
+round(summary.PCA.JDRS(pca), 2)
+```
+
+Note that the first principal component (PC1) captures $56\%$ of the variance.
+Adding PC2 increments this to $74\%$ of the variance, and PC3 brings us to
+$86\%$. However, note that only one eigenvalue is greater than one:
+$\lambda_{\text{PC1}} = 2.82$. We proceed to viewing the scree plot to continue
+with our determination of the number of principal components to keep.
+
+```{r}
+screeplot(pca, type = "lines", col = "red", lwd = 2, pch = 19, cex = 1.2, 
+          main = "Scree Plot of Transformed Data")
+```
+
+There is a clear elbow after the first principal component, which suggests
+keeping only PC1, just as suggested by the ``eigenvalue $>1$'' rule. We do not
+perform parallel analysis, as our data violate the multivariate normality
+assumption (see Part 1). While we would need three principal components to
+explain $>80\%$ of the variance, we proceed with only PC1 based on the two
+other evaluation criteria. Though $56\%$ of the variance is lower than the soft
+$80\%$ threshold, it represents a dominant latent structure in this
+psychological dataset. Given that PC1 captures more than triple the variance of
+the next component ($17\%$), we prioritize a parsimonious, one-dimensional
+interpretation over a more complex, three-dimensional model that would include
+components with eigenvalues below 1.
+
+
+
+# Part 4 | Interpretation of Loadings
+Now, we present and interpret the loadings for our principal components. While
+we will only proceed with PC1, we include the loadings for PC2--5 for reference.
+
+```{r}
+round(pca$rotation, 2)
+biplot(pca, choices = c(1, 2), pc.biplot = T)
+```
+
+Based on the loadings for PC1, we see two predominant axes emerge: a measure of
+general well-being and a measure of psychological distress. Observe that
+flourishing \
+
+
+
+```{r}
+ciscoreplot(pca, c(1, 2), pca_data_transform)
+```
