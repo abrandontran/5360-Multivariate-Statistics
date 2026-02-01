@@ -338,7 +338,18 @@ biplot(pca, choices = c(1, 2), pc.biplot = T)
 
 Based on the loadings for PC1, we see two predominant axes emerge: a measure of
 general well-being and a measure of psychological distress. Observe that
-flourishing \
+flourishing is the only variable with a positive loading ($0.42$), indicating
+that a higher score on the flourishing scale contributes directly to a higher
+PC1 score. Conversely, the remaining variables have negative loadings, with
+depression having the largest effect (-0.53) on a reduced PC1 score. The biplot 
+confirms our findings visually (we interpret this along the x-axis, we are only 
+assessing PC1). Flourishing points right, whereas the remaining
+variables point left.
+
+Effectively, we can interpret PC1 to be a measure of a student's psychological
+health. A higher score is commensurate with the flourishing Likert questions,
+wheras a lower score indicates trouble with one or more of: depression, anxiety,
+loneliness, and eating disorders.
 
 
 
