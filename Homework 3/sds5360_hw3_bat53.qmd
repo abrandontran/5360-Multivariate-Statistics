@@ -460,6 +460,8 @@ conf_data[, -4] %>%
 Though our overall cross-validated accuracy is $\approx 52\%$, as illustrated in
 Table 4 the model is most effective at predicting `Cis-Het` and `TGNC`, with
 recalls of $63.3\%$ and $54.4\%$, accordingly. However, the `Cis-LGBQ+` group
-has a low recall of $19.0\%$. Most of these students are misclassified as one
-of the other two groups, illustrating that their mental health data doesn't
-form a unique cluster.
+has a low recall of $19.0\%$. Most of these students are misclassified as `TGNC`,
+illustrating that their psychological health data doesn't form a unique cluster.
+Rather, they may exhibit scores that are more similar to the `TGNC` community,
+which is unsurprising, given both groups undergo systemic forms of inequity tied
+under the same "LGBTQIA+" umbrella.
