@@ -109,7 +109,7 @@ with our analysis.
 
 # Part 1 | Evaluating Assumptions
 We begin by visualizing our data via a matrix (pairs) plot:
-```{r}
+```{r, fig.width = 10, fig.height = 10, out.width = "100%"}
 set.seed(4747)
 df_sample <- df %>% sample_n(2000)
 
@@ -322,7 +322,7 @@ step_model <- stepclass(
     prior = c(1/3, 1/3, 1/3),
     improvement = 0.01,
     fold = 10,
-    trace = FALSE)
+    output = FALSE)
 
 step_model
 ```
@@ -465,3 +465,44 @@ illustrating that their psychological health data doesn't form a unique cluster.
 Rather, they may exhibit scores that are more similar to the `TGNC` community,
 which is unsurprising, given both groups undergo systemic forms of inequity tied
 under the same "LGBTQIA+" umbrella.
+
+
+
+# Part 6 | "Best" Discriminators
+We cannot rely solely on raw coefficients from `lda_fit` to determine the "best"
+discriminator(s), as our variables are scaled differently. We thus calculate
+standardized discriminant coefficients.
+
+```{r}
+lda_std <- lda(identity_group ~ 
+           scale(deprawsc) + scale(anx_score) + scale(lonesc) + scale(flourish), 
+           data = df_clean, 
+           prior = c(1/3, 1/3, 1/3))
+
+std_coefs <- lda_std$scaling
+```
+
+```{r, echo = FALSE}
+std_coefs_df <- as.data.frame(std_coefs) %>%
+  arrange(desc(abs(LD1)))
+
+std_coefs_df %>%
+  kbl(caption = "Standardized Discriminant Coefficients",
+      booktabs = TRUE,
+      format = "latex",
+      digits = 3,
+      col.names = c("LD1 (98.3%)", "LD2 (1.7%)"),
+      align = "cc") %>%
+  kable_styling(latex_options = c("striped", "hold_position"))
+```
+
+We see in Table 5 that depression (`deprawsc`) is the dominant predictor on the
+first (and second) discriminant function, with a coefficient of $-0.539$ after
+all variables are scaled. This indicates that differences in depression are the
+primary metric separating `Cis-Het`, `Cis-LGBQ+`, and `TGNC` students. Loneliness
+and flourishing were the second most dominant predictors, with anxiety providing
+the least unique discriminatory power once the other variables are accounted for.
+
+
+
+# Part 7 | Score Plots
