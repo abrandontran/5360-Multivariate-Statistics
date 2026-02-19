@@ -547,4 +547,40 @@ the results we have encountered thus far.
 
 
 
-# 
+# Part 8 | Visualizing Discriminants
+We will use the `partimat()` function to plot the shaded decision regions for a
+pair of our original variables: specifically, of depression (`deprawsc`) and
+loneliness (`lonesc`), which were identified as our "best" discriminators in
+Part 6. Note that we will need to take a sample of our data, as we will suffer
+from overplotting and rendering issues otherwise.
+
+```{r}
+set.seed(4747)
+
+df_sample <- df %>% sample_n(1000) %>%
+    as.data.frame()
+
+partimat(
+    identity_group ~ deprawsc + lonesc,
+    data = df_sample,
+    method = 'lda',
+    nplots.vert = 1,
+    nplots.hor = 1,
+    main = 'LDA Decision Regions: Depression vs. Loneliness',
+    name = c('Depression(deprawsc)', 'Loneliness (lonesc)')
+    )
+```
+
+The resulting partition plot displays the decision regions spanning our two
+strongest  discriminators. It reveals a linear boundary separating the low-
+distress region (bottom) from the high distress region (top). Notably, while we
+have three identity groups, only two prediction territories emerge. The
+centroids align linearly, confirming the dominance of the first discriminant
+function (`LD1`). However, the lack of a distinct prediction region for the
+middle group (`Cis-LGBQ+`), as well as the high volume of misclassified points,
+visually reinforces our cross-validated accuracy results. While identity groups
+show significantly different mean mental health profiles, individual variance
+is too large to cleanly and linearly separate them using only these two metrics.
+
+
+
