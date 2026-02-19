@@ -413,10 +413,12 @@ Recall that we performed both regular and $10$-fold cross validation to
 determine whether to proceed with LDA or QDA in Part 2.
 
 ```{r}
-lda_regular_acc <- round(sum(diag(prop.table(table(df$identity_group, predict(lda_fit)$class)))), 4)
+lda_regular_acc <- 
+    round(sum(diag(prop.table(table(df$identity_group, predict(lda_fit)$class)))), 4)
+
 acc_comp <- data.frame(
-  Type = c("Regular Accuracy", "Cross-Validated Accuracy"),
-  Value = c(lda_regular_acc, lda_cv_acc)
+    Type = c("Regular Accuracy", "Cross-Validated Accuracy"),
+    Value = c(lda_regular_acc, lda_cv_acc)
 )
 
 acc_comp
