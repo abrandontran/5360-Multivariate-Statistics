@@ -506,3 +506,45 @@ the least unique discriminatory power once the other variables are accounted for
 
 
 # Part 7 | Score Plots
+To visualize the results of our preceding analyses, we generate score plots.
+Note that to enhance visual interpretability, we use `ggplot2` as opposed to
+the plotting functons of base `R` that were used in class.
+
+```{r}
+lda_preds <- predict(lda_fit)
+score_data <- data.frame(
+  Identity = df_clean$identity_group,
+  LD1 = lda_preds$x[, 1],
+  LD2 = lda_preds$x[, 2]
+)
+
+ggplot(score_data, aes(x = LD1, y = LD2, color = Identity)) +
+  geom_point(alpha = 0.1, size = 0.5) + 
+  stat_ellipse(linewidth = 1.2, level = 0.95) +
+  theme_minimal() +
+  labs(
+    title = "Discriminant Analysis Score Plot",
+    subtitle = "Mental Health Profiles by Identity Group",
+    x = "LD1 (98.28% of Discriminating Power)",
+    y = "LD2 (1.72% of Discriminating Power)"
+  ) +
+  theme(legend.position = "bottom")
+```
+
+Our first observation is the horizontal dominance of `LD1`; that is, almost all
+of the separation between ellipses happens horizontally along the $x$-axis.
+This reinforces our finding in Part 4 that `LD1` accounts for a majority
+($98.28\%$) of our discriminating power. Conversely, `LD2` accounts for only
+$1.72\%$, evidenced by the lack of vertical separation of the ellipses along
+the $y$-axis.
+
+Furthermore, recall our confusion matrix in Part 5. There, we observeed that
+our model frequently misclassifies Cis-LGBQ+ students, most often as TGNC. This
+reflects in our score plot, which reveals that this group exhibits psychological
+health scores that exist in between Cis-Het and TGNC students, with more overlap
+with the latter as opposed to the former. We therefore feel comfortable with
+the results we have encountered thus far.
+
+
+
+# 
