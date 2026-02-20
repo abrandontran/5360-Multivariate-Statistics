@@ -19,7 +19,7 @@ library(heplots)
 library(haven)
 library(float)
 library(klaR)
-source("https://raw.githubusercontent.com/jreuning/sds363_code/refs/heads/main/discrim.r.txt")
+library(class)
 ```
 
 
@@ -109,7 +109,7 @@ with our analysis.
 
 # Part 1 | Evaluating Assumptions
 We begin by visualizing our data via a matrix (pairs) plot:
-```{r, fig.width = 10, fig.height = 10, out.width = "100%"}
+```{r, fig.width = 10, fig.height = 10, out.width = "100%", cache = TRUE}
 set.seed(4747)
 df_sample <- df %>% sample_n(2000)
 
@@ -123,7 +123,7 @@ ggpairs(
 ```
 
 We see strong **separaton of means** for flourishing (`flourish`) and depression
-(`deprawsc`). In comparison, loneliness (`lonesc`) feataures a lot of overlap
+(`deprawsc`). In comparison, loneliness (`lonesc`) features a lot of overlap
 and likely will not be a strong predictor in our model.
 
 Regarding **normality,** we first note a slight right skew for depression
@@ -134,7 +134,7 @@ question), and potentially reducing the accuracy of the discriminant function.
 Finally, flourishing (`flourish`) is left-skewed. We formally analyze
 multivariate normality via chi-square quantile plots.
 
-```{r}
+```{r, cache = TRUE}
 par(mfrow=c(1,3))
 cqplot(df[df$identity_group == "Cis-Het",
     c("deprawsc", "anx_score", "lonesc", "flourish")], main = "Cis-Het Q-Q Plot")
@@ -154,7 +154,7 @@ rankings. We consider the same transformations as in Homework 2:
 - Square (quadratic) of flourish
 
 However, these and similar transformations do not yield improved multivariate
-normality. We supporess the code for the ease of the grader but present the
+normality. We suppress the code for the ease of the grader but present the
 corresponding Q-Q plots for the transformed data:
 
 ```{r, echo = FALSE}
@@ -191,7 +191,7 @@ Finally, we check for **equal covariance**. The matrix plot shows that
 anxiety versus depression maintains fairly equal correlation across all groups
 ($0.747$, $0.710$, $0.694$). This trend is reasonably consistent among other
 predictor pairs; however, flourishing versus depression, for example, features
-wider gaps in correlation ($0.472, 0.448, 0.356$). These still feel reasoably
+wider gaps in correlation ($0.472, 0.448, 0.356$). These still feel reasonably
 equivalent, but for completeness, we formally test for equal covariance via
 Box's M-test.
 
@@ -224,7 +224,7 @@ rat_lgbq_cis  <- get_ratio(cov_lgbq, cov_cis)
 rat_tgnc_lgbq <- get_ratio(cov_tgnc, cov_lgbq)
 ```
 
-```{r, echo = FALSE}
+```{r, echo = FALSE, cache = TRUE}
 mat1 <- matrix(c(1.2, 1.0, 1.1, 1.4,
                  1.0, 1.0, 1.3, 1.1,
                  1.1, 1.3, 1.1, 1.1,
@@ -291,8 +291,10 @@ qda_cv <- qda(
     prior = c(1/3, 1/3, 1/3),
     CV = TRUE)
 
-lda_cv_acc <- round(sum(diag(prop.table(table(df$identity_group, lda_cv$class)))), 4)
-qda_cv_acc <- round(sum(diag(prop.table(table(df$identity_group, qda_cv$class)))), 4)
+lda_cv_acc <- round(sum(
+  diag(prop.table(table(df$identity_group, lda_cv$class)))), 4)
+qda_cv_acc <- round(sum(
+  diag(prop.table(table(df$identity_group, qda_cv$class)))), 4)
 
 cat("LDA CV Accuracy:", lda_cv_acc, "\nQDA CV Accuracy:", qda_cv_acc)
 ```
@@ -308,7 +310,7 @@ Discriminant Analysis to determine whether there are any redundant
 discriminators we should drop. Note we proceed with $10$-fold validation due
 to our large sample size.
 
-```{r, }
+```{r}
 df_clean <- df %>% drop_na()
 
 X <- df_clean[, c('deprawsc', 'anx_score', 'lonesc', 'flourish')]
@@ -361,7 +363,7 @@ null hypothesis and conclude that mean vectors are not the same across groups.
 We further present the univariate analyses (equivalent to `summary.aov` output)
 to better understand the relevance of each discriminator in Table 3.
 
-```{r, echo = FALSE}
+```{r, echo = FALSE, cache = TRUE}
 manova_results <- data.frame(
   Test = c("Multivariate (Wilks)", "Depression (PHQ-9)", "Anxiety (GAD-7)", "Loneliness (UCLA)", "Flourishing"),
   Statistic = c("0.9191", "---", "---", "---", "---"),
@@ -413,8 +415,8 @@ Recall that we performed both regular and $10$-fold cross validation to
 determine whether to proceed with LDA or QDA in Part 2.
 
 ```{r}
-lda_regular_acc <- 
-    round(sum(diag(prop.table(table(df$identity_group, predict(lda_fit)$class)))), 4)
+lda_regular_acc <- round(
+  sum(diag(prop.table(table(df$identity_group, predict(lda_fit)$class)))), 4)
 
 acc_comp <- data.frame(
     Type = c("Regular Accuracy", "Cross-Validated Accuracy"),
@@ -434,7 +436,7 @@ well (or not). For this, we generate a confusion matrix and append recall
 conf_matrix <- table(Actual = df$identity_group, Predicted = lda_cv$class)
 ```
 
-```{r, echo = FALSE}
+```{r, echo = FALSE, cache = TRUE}
 conf_data <- data.frame(
   Actual_Group = c("Cis-Het", "Cis-LGBQ+", "TGNC"),
   Pred_CisHet = c(28363, 7040, 1498),
@@ -584,3 +586,124 @@ is too large to cleanly and linearly separate them using only these two metrics.
 
 
 
+# Part 9 | $k$-Nearest Neighbors
+We will now attempt to perform classification via a popular nonparametric
+method, $k$-nearest neighbors. This provides us the flexibility of nonlinear
+decision boundaries and circumvents the need for equal covariances amongst
+discriminants. Note that to properly perform $k$-NN, we must scale our data and
+leverage cross-validation. We set $k=50$ to match our sample size.
+
+```{r}
+# Create an 80-20 train/test split.
+set.seed(4747)
+train_idx <- sample(1:nrow(df), size = 0.8 * nrow(df))
+
+# Scale predictors.
+train_x <- scale(df[train_idx,
+                c('deprawsc', 'anx_score', 'lonesc', 'flourish')])
+test_x <- scale(df[-train_idx,
+                c('deprawsc', 'anx_score', 'lonesc', 'flourish')],
+                center = attr(train_x, 'scaled:center'),
+                scale = attr(train_x, 'scaled:scale'))
+
+# Isolate response.
+train_y <- df$identity_group[train_idx]
+test_y <- df$identity_group[-train_idx]
+
+# Run kNN.
+knn_pred <- knn(train = train_x, test = test_x, cl = train_y, k = 50)
+
+# Output results.
+knn_ct <- table(Actual = test_y, Predicted = knn_pred)
+knn_acc <- round(sum(diag(prop.table(knn_ct))), 4); knn_acc
+```
+
+```{r, echo = FALSE, cache = TRUE}
+knn_conf_data <- data.frame(
+  Actual_Group = c("Cis-Het", "Cis-LGBQ+", "TGNC"),
+  Pred_CisHet = c(8820, 3019, 953),
+  Pred_LGBQ = c(212, 157, 93),
+  Pred_TGNC = c(4, 7, 2)
+)
+
+knn_conf_data$Total <- rowSums(knn_conf_data[, 2:4])
+knn_conf_data$Recall <- round(c(8820, 157, 2) / knn_conf_data$Total * 100, 2)
+
+knn_conf_data[, -5] %>%
+  kbl(caption = "kNN Confusion Matrix for Identity Groups (Accuracy = 67.68\\%)",
+      booktabs = TRUE,
+      format = "latex",
+      col.names = c("Actual Group", "Pred: Cis-Het", "Pred: Cis-LGBQ+", "Pred: TGNC", "Recall (%)"),
+      align = "lcccc") %>%
+  kable_styling(latex_options = c("striped", "hold_position")) %>%
+  add_header_above(c(" " = 1, "Predicted Group Membership" = 3, " " = 1))
+```
+
+We see a huge jump in predictive accuracy to $67.68\%$, which appears to be
+much higher than our accuracy rate yielded by LDA of $51.67\%$. However, when
+looking at the confusion matrix in Table 6, we see that this is due to
+dominance from `Cis-Het`, which happens to comprise $67.52\%$ of our data. Said 
+differently, kNN is just predicting `Cis-Het` over and over again, yielding a
+high recall for that group of $97.61\%$ but low recalls for the other groups. 
+We were able to control for this with LDA by setting equal priors, but kNN does not 
+use such priors.
+
+To compare against the decision regions we plotted for our strongest two
+discriminators in Part 8 (depression and loneliness), we plot the decision
+boundaries yielded by kNN for these same variables. We suppress the code to
+generate the plot for the grader's convenience but note that `ggplot` is used.
+
+```{r, echo = FALSE}
+set.seed(4747)
+train_x_jitter <- data.frame(
+  deprawsc = jitter(train_x[, "deprawsc"], amount = 0.0001),
+  anx_score = jitter(train_x[, "anx_score"], amount = 0.0001),
+  lonesc = jitter(train_x[, "lonesc"], amount = 0.0001),
+  flourish = jitter(train_x[, "flourish"], amount = 0.0001)
+)
+
+grid_size <- 150
+x_seq <- seq(min(train_x_jitter$lonesc), max(train_x_jitter$lonesc), length.out = grid_size)
+y_seq <- seq(min(train_x_jitter$deprawsc), max(train_x_jitter$deprawsc), length.out = grid_size)
+
+plot_grid_4d <- expand.grid(lonesc = x_seq, deprawsc = y_seq)
+plot_grid_4d$anx_score <- 0
+plot_grid_4d$flourish <- 0
+
+plot_grid_4d <- plot_grid_4d[, c("deprawsc", "anx_score", "lonesc", "flourish")]
+
+grid_preds <- knn(train = train_x_jitter, test = plot_grid_4d, cl = train_y, k = 50, use.all = FALSE)
+
+background_data <- data.frame(
+  lonesc = plot_grid_4d$lonesc,
+  deprawsc = plot_grid_4d$deprawsc,
+  Predicted = grid_preds
+)
+
+sample_idx <- sample(1:nrow(train_x_jitter), 1000)
+point_data <- data.frame(
+  lonesc = train_x_jitter$lonesc[sample_idx],
+  deprawsc = train_x_jitter$deprawsc[sample_idx],
+  Actual = train_y[sample_idx]
+)
+
+ggplot() +
+  geom_raster(data = background_data, aes(x = lonesc, y = deprawsc, fill = Predicted), alpha = 0.3) +
+  geom_point(data = point_data, aes(x = lonesc, y = deprawsc, color = Actual), size = 1.5, shape = 16) +
+  theme_minimal() +
+  labs(title = "4D kNN Decision Boundaries (k=50): 2D Cross-Section",
+       subtitle = "Anxiety & Flourishing held at Mean (0) | Axes in Z-Scores",
+       x = "Loneliness (Scaled)",
+       y = "Depression (Scaled)") +
+  scale_fill_manual(values = c("Cis-Het" = "lightblue", "Cis-LGBQ+" = "lightgreen", "TGNC" = "pink")) + 
+  scale_color_manual(values = c("Cis-Het" = "blue", "Cis-LGBQ+" = "darkgreen", "TGNC" = "red"))
+```
+
+We see, as insinuated by the confusion matrix, a vast majority of the decision
+regions predict `Cis-Het`, resulting in $68\%$ accuracy because $67\%$ of our
+data is, in fact, `Cis-Het`. There is only one region (in green) where the model
+predicts `Cis-LGBQ+`, and `TGNC` appears to never be predicted.
+
+This suggests that for highly overlapping, imbalanced demographic data, enforcing
+equal priors via discriminant analysis yields a much more practically useful
+and balanced classification model.
