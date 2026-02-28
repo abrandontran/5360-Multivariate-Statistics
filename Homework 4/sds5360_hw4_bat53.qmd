@@ -1,0 +1,242 @@
+---
+title: "Homework 4: MANOVA"
+subtitle: "S&DS 5360 | Multivariate Statistics"
+author: "Brandon Tran (brandon.tran@yale.edu)"
+date: today
+date-format: "MMMM DD, YYYY"
+format: pdf 
+---
+
+
+
+```{r, include = FALSE}
+library(MASS)
+library(dplyr)
+library(tidyr)
+library(haven)
+library(car)
+library(emmeans)
+```
+
+
+
+# Setup & Data Overview
+We will study the following variables, some of which were manually encoded
+after data cleaning, and other of which were part of the original study:
+
+- **Continuous Response:** Depression Score (`deprawsc`) and Flourishing Score (`flourish`)
+- **Categorical Predictors:** Therapy Yes/No (`ther_any`) and Sexual Orientation (`queer`)
+- **Continuous Predictor:** Average Weeknight Hours of Sleep (`sleep_wknight`) 
+
+Per feedback from the grader, we omit the code to preprocess the data.
+
+```{r, echo = FALSE, cache = TRUE}
+hms_data <- read_sav("../data/hms_data.sav", encoding = 'latin1')
+
+df <- hms_data %>%
+
+    select(
+        responseid,
+        deprawsc,
+        flourish,
+        ther_any,
+        sexual_h,
+        sexual_l,
+        sexual_g,
+        sexual_bi,
+        sexual_queer,
+        sexual_quest,
+        sexual_selfID,
+        sexual_asexual,
+        sexual_pan,
+        sexual_prefnoresp,
+        sleep_wknight
+    ) %>%
+    
+    mutate(across(starts_with('sexual_'), ~ replace_na(., 0))) %>%
+
+    filter(sexual_prefnoresp == 0) %>%
+
+    mutate(
+        queer = +if_any(
+            c(sexual_l, sexual_g, sexual_bi, sexual_queer, sexual_quest,
+              sexual_selfID, sexual_asexual, sexual_pan),
+              ~ .x == 1
+        ),
+        queer = as.factor(queer),
+        ther_any = as.factor(ther_any),
+        deprawsc = as.numeric(deprawsc),
+        flourish = as.numeric(flourish),
+        sleep_wknight = as.numeric(sleep_wknight)
+    ) %>%
+
+    select(deprawsc, flourish, ther_any, queer, sleep_wknight) %>%
+    na.omit()
+
+str(df)
+head(df)
+```
+
+
+
+# Part 1 | Visualizing Our Categorical Response Variables
+We present interaction plots for each of our response variables, `deprawsc` and
+`flourish`.
+
+```{r, fig.width = 12, fig.height = 6, out.width = '100%'}
+df_plot <- df %>%
+  mutate(
+    Therapy_Status = factor(ther_any, levels = c(0, 1), labels = c("No Therapy", "In Therapy")),
+    Sexual_Orientation = factor(queer, levels = c(0, 1), labels = c("Heterosexual", "Queer"))
+  )
+
+par(mfrow = c(1, 2))
+
+interaction.plot(
+    x.factor = df_plot$Therapy_Status,
+    trace.factor = df_plot$Sexual_Orientation,
+    trace.label = 'Sexual Orientation',
+    response = df$deprawsc,
+    fun = mean,
+    type = 'b',
+    legend = TRUE,
+    col = c('blue', 'red'),
+    main = 'Interaction Plot for Depression',
+    xlab = 'Therapy Utilization',
+    ylab = 'Mean Depression Score'
+)
+
+interaction.plot(
+    x.factor = df_plot$Therapy_Status,
+    trace.factor = df_plot$Sexual_Orientation,
+    trace.label = 'Sexual Orientation',
+    response = df$flourish,
+    fun = mean,
+    type = 'b',
+    legend = TRUE,
+    col = c('blue', 'red'),
+    main = 'Interaction Plot for Flourishing',
+    xlab = 'Therapy Utilization',
+    ylab = 'Mean Flourishing Score'
+)
+```
+
+We observe that across both continuous response variables, we see roughly
+parallel lines. This indicates there is likely no interaction; that is, the
+effect of being in therapy or not seems to be equivalent for both queer
+and heterosexual students.
+
+The positive slope of both lines for depression indicates that therapy
+utlization is associated with higher levels of depression. By comparison, the
+negative slope of both lines for flourishing indicates that therapy utilization
+is associated with lower levels of flourishing, as expected.
+
+Finally, observing the gap between lines in both plots, we determine the main
+effects. Queer students seem to have lower flourishing scores than their
+heterosexual counterparts, regardless of therapy utilization. Conversely,
+heterosexual students yield higher flourishing scores, regardless of therapy
+utilization.
+
+
+
+# Part 2 | Two-Way MANOVA
+With an understanding of how our variables interact in hand, we proceed to
+run two-way multivariate analysis of variance (MANOVA) to further examine the
+effect of therapy and sexual orientation on depression and flourishing. We
+perform a Type III (Marginal) MANOVA test because it is the most conservative
+approach for our Likert-scaled survey data with unequal group sizes. It does
+not assume there is no interaction (Type II), nor does it assume a perfectly
+balanced experiment (Type I). We test the following hypotheses:
+
+**Test 1:** Does the effect of therapy depend on sexual orientation?
+
+- $H_{0}$: No multivariate interaction between therapy utilization and sexual
+orientation; effect on mental health response variables is the same for queer
+and heterosexual students.
+- $H_{1}$: There exists a multivariate interaction; the effect of therapy on
+mental health response variables differs based on sexual orientation.
+
+**Test 2:** Do queer and heterosexual students have different mental health profiles?
+
+- $H_{0}$: $\boldsymbol{\mu}_{\text{heterosexual}} = \boldsymbol{\mu}_{\text{queer}}$
+- $H_{1}$: $\boldsymbol{\mu}_{\text{heterosexual}} \ne \boldsymbol{\mu}_{\text{queer}}$
+
+**Test 3:** Do therapy users and non-users have different mental health profiles?
+
+- $H_{0}$: $\boldsymbol{\mu}_{\text{therapy}} = \boldsymbol{\mu}_{\text{no therapy}}$
+- $H_{1}$: $\boldsymbol{\mu}_{\text{therapy}} \ne \boldsymbol{\mu}_{\text{no therapy}}$
+
+```{r}
+manova_fit <- lm(cbind(deprawsc, flourish) ~ ther_any * queer, data = df)
+Manova(manova_fit, type = 'III')
+```
+
+Using Pillai's Trace, all efforts were statistically significant $p < 0.001$,
+and we reject all three of the hypotheses noted above.
+The significance of the interaction (`thera_any:queer`) somewhat contradicts
+our visual results in Part 1, but we propose that this signifiance is directly
+attributable to our large sample size ($n = 30,323$) moreso than the presence
+of interactions between therapy and sexual orientation. This belief is further
+supported by review of the $F$ statistics, which reveal that the main effects
+of sexual orientation ($F_{2, 30318} = 513$) and therapy ($F_{2, 30318} = 250$)
+are substantially larger than the interaction ($F_{_{2, 30318}} = 10$).
+
+```{r}
+summary.aov(manova_fit)
+```
+
+In the univariate setting, we see concurrent results. Sexual orientation
+maintains a greater effect on depression and flourishing ($F = (1392, 833)$,
+respectively) than therapy attendance ($F = (1055, 276)$, respectively).
+The interaction weight is nearly two orders of magnitude lower in both cases.
+
+Collectively, these results suggest an additive model. The lack of a practical
+interaction indicates that those attending therapy display lower mental health
+scores (higher depression, lower flourishing), regardless of sexual orientation.
+Similary, the disparity in mental health between queer and heterosexual students
+remains regardless of whether they attend therapy. This implies that while
+therapy is associated with higher distress, it does not appear to fundamentally
+alter the gap in mental health observed between queer students and their
+heterosexual peers.
+
+
+
+# Part 3 | Contrasts
+Now, we perform multivariate and univariate contrasts to compare combinations
+of factors. We will focus on the main effects, following our findings in Part 2.
+
+```{r}
+test(pairs(emm_queer), joint = TRUE)
+test(pairs(emm_ther), joint = TRUE)
+```
+
+Multivariate pairwise contrasts revealed statistically significant multivariate
+differences for both factors, indicating that the overall mental health profile
+(depression and flourishing scores) differs distinctly from heterosexual
+students, and likewise for therapy users versus non-users. Because our
+categorical variables are binary (yes or no), these results are exactly the
+same as what we observed in Part 2.
+
+```{r}
+emm_queer <- emmeans(manova_fit, ~ queer | rep.meas)
+emm_ther <- emmeans(manova_fit, ~ ther_any | rep.meas)
+
+summary(pairs(emm_queer), adjust = 'none')
+summary(pairs(emm_ther), adjust = 'none')
+```
+
+Univariate contrasts using estimated marginal means revealed that for sexual
+orientation, queer students reported significantly poorer outcomes: when
+compared to their heterosexual peers, depression scores were on average $2.73$
+points worse, and their flourishing scores were $3.15$ worse. For therapy
+utilization, students in therapy reported depression scores $1.64$ points worse
+and flourishing scores $1.02$ points worse when compared to those not in
+therapy. Considering that the depression scale ranges from $0$ to $27$, these
+figures represent a change that covers up to $10\%$ of that scale. Similarly,
+the flourishing scale ranges from $8$ to $56$. These figures represent a change
+that covers up to $6.6\%$ of that scale. Statistical signifiance is observed
+across all $t$-tests.
+
+
+
+# Part 4 | Adding a Continuous Variable
