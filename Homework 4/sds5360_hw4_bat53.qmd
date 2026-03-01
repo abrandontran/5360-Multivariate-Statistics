@@ -16,6 +16,9 @@ library(tidyr)
 library(haven)
 library(car)
 library(emmeans)
+library(ggplot2)
+library(patchwork)
+library(heplots)
 ```
 
 
@@ -240,3 +243,130 @@ across all $t$-tests.
 
 
 # Part 4 | Adding a Continuous Variable
+We add average hours of sleep per weeeknight (`sleep_wknight`) as a continuous
+predictor. First, we check to ensure there are linear relationships between our
+covariates and responses.
+
+```{r}
+a <- ggplot(df, aes(x = sleep_wknight, y = deprawsc)) +
+    geom_point() +
+    geom_smooth(method = 'lm') +
+    labs(
+        title = 'Linearity: Sleep vs. Depression',
+        x = 'Hours of Weeknight Sleep',
+        y = 'Depression Score'
+    )
+
+b <- ggplot(df, aes(x = sleep_wknight, y = flourish)) +
+    geom_point() +
+    geom_smooth(method = 'lm') +
+        labs(
+        title = 'Linearity: Sleep vs. Flourish',
+        x = 'Hours of Weeknight Sleep',
+        y = 'Flourishing Score'
+    )
+
+a + b
+```
+
+To verify the assumption of linearity, we inspected scatterplots with fitted
+regression lines. Due to the discrete nature of the sleep variable and the
+large sample size, the data points appear as vertical bands. However, the 
+fitted regression lines reveal a clear linear trend: as hours of sleep increase, 
+mean depression scores linearly decrease and mean flourishing scores linearly 
+increase. This confirms that modeling sleep as a linear covariate is appropriate 
+for this analysis.
+
+```{r}
+model_cov <- lm(cbind(deprawsc, flourish) ~
+                ther_any + queer + sleep_wknight, data = df)
+
+Manova(model_cov, type = "III")
+```
+
+Somewhat surprisingly, sleep is not only a significant predictor in our 
+multivariate analysis: it is also the largest ($F = 1,348$, opposed to $768$
+and $329$ for queer and therapy, respectively). We can infer that sleep
+duration explains a unique part of the variance in mental health that is
+incremental of sexual orientation and therapy use. This does not diminish the
+robustness of our original predictors; they remain significant with a large
+magnitude. Said differently, mental health disparities for queer students and
+students in therapy are not fully explained by sleep differences.
+
+```{r}
+summary(model_cov)
+```
+
+Analyzing the univariate results provides the direction and magnitude of the
+effects in our model. The interprtation of coefficients for sexuality and
+therapy do not too severly differ from our analysis in Part 2, so we focus on
+sleep. We see that for every additional hour of sleep a student gets, their
+depression score drops by $1.19$ points, and their flourish score increases by
+$0.98$ points. For context, if a queer student sleeps $2$ additional hours a
+night, this nearly offsets the increase in depression seen amongst queer
+students.
+
+
+
+# Part 5 | Evaluating Model Assumptions
+To evaluate the assumption of multivariate normality, we produce a Chi-Square
+Q-Q plot to compare squared Mahalanobis distances of our residuals against the
+theoretical quantities of a $\chi^2$ distribution with $df = 2$.
+
+```{r}
+par(mfrow=c(1,1))
+cqplot(model_cov, main = "Chi-Square Q-Q Plot: Multivariate Normality Check")
+```
+
+As we have observed in previous analyses of this dataset, our data do not meet
+the multivariate normality assumption. This is because our data are based on
+Likert-scale responses, which have a floor effect at $0$ and categorical
+structure.  However, as in the past, we have justified this with our significant
+sample size ($n = 30,320$ for this dataset). By the Central Limit Theorem, the
+$F$- and $t$- tests we ran in the previous sections should remain robust.
+
+However, we consider a square root transformation of our response variables to correct the distribution of our residuals. Previously, we have considered
+square root and log transformations to correct for the skew, to no avail. For
+this assignment, we vary our approach by performing a Box-Cox analysis
+to find the optimal $\lambda$ for normality.
+
+```{r}
+summary(p1 <- powerTransform(cbind(deprawsc, flourish) ~ ther_any + queer + sleep_wknight, data = df, family="yjPower"))
+```
+
+Box-Cox suggests raising depression to $0.4307$ and flourishing to $2.671$.
+
+```{r}
+model_trans <- lm(cbind(df$deprawsc^0.4307, df$flourish^2.671) ~
+                      ther_any + queer + sleep_wknight, data = df)
+
+cqplot(model_trans, main = "Chi-Square Q-Q Plot: Transformed Variables")
+```
+
+We see that this does not completly correct for the non-normality, but the
+heavy tail is more controlled than with our original data. While we do not
+expect to see any changes in significance for our full model (again, due to our
+large sample size and extremely small $p$-values), we re-run the MANOVA on our
+transformed variables.
+
+```{r}
+model_trans <- lm(cbind(df$deprawsc^0.4307, df$flourish^2.671) ~
+                ther_any + queer + sleep_wknight, data = df)
+
+Manova(model_trans, type = "III")
+```
+
+As expected, all of our predictors maintain significance, and the relative
+effect sizes by predictor remain congruent. We see a slight increase in the $F$-
+statistic for `queer`, ($768 \to 815$) as well as `ther_any` ($329 \to 394$),
+potentially a result of reducing the noise in our data via transformations.
+On the other hand, `sleep_wknight` remains consistent.
+
+
+
+# Part 6 | MRPP Test and Adjustment for Multiple Comparisons
+Because we conducted multiple univariate tests after our MANOVA, our family-
+wise error rate increased. We don't expect significance to change after
+adjusting for multiple comparisons given our extremely lower $p$-values, but we
+adjust to exercise proper hygiene.
+
