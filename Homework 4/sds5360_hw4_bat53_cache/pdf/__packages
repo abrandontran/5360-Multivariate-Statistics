@@ -4,3 +4,10 @@ tidyr
 haven
 carData
 car
+emmeans
+ggplot2
+patchwork
+broom
+heplots
+permute
+vegan

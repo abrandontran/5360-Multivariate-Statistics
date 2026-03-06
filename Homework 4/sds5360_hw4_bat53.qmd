@@ -19,6 +19,7 @@ library(emmeans)
 library(ggplot2)
 library(patchwork)
 library(heplots)
+library(vegan)
 ```
 
 
@@ -75,9 +76,6 @@ df <- hms_data %>%
 
     select(deprawsc, flourish, ther_any, queer, sleep_wknight) %>%
     na.omit()
-
-str(df)
-head(df)
 ```
 
 
@@ -89,8 +87,10 @@ We present interaction plots for each of our response variables, `deprawsc` and
 ```{r, fig.width = 12, fig.height = 6, out.width = '100%'}
 df_plot <- df %>%
   mutate(
-    Therapy_Status = factor(ther_any, levels = c(0, 1), labels = c("No Therapy", "In Therapy")),
-    Sexual_Orientation = factor(queer, levels = c(0, 1), labels = c("Heterosexual", "Queer"))
+    Therapy_Status = factor(ther_any, levels = c(0, 1),
+                            labels = c("No Therapy", "In Therapy")),
+    Sexual_Orientation = factor(queer, levels = c(0, 1),
+                            labels = c("Heterosexual", "Queer"))
   )
 
 par(mfrow = c(1, 2))
@@ -209,6 +209,9 @@ Now, we perform multivariate and univariate contrasts to compare combinations
 of factors. We will focus on the main effects, following our findings in Part 2.
 
 ```{r}
+emm_queer <- emmeans(manova_fit, ~ queer | rep.meas)
+emm_ther <- emmeans(manova_fit, ~ ther_any | rep.meas)
+
 test(pairs(emm_queer), joint = TRUE)
 test(pairs(emm_ther), joint = TRUE)
 ```
@@ -221,9 +224,6 @@ categorical variables are binary (yes or no), these results are exactly the
 same as what we observed in Part 2.
 
 ```{r}
-emm_queer <- emmeans(manova_fit, ~ queer | rep.meas)
-emm_ther <- emmeans(manova_fit, ~ ther_any | rep.meas)
-
 summary(pairs(emm_queer), adjust = 'none')
 summary(pairs(emm_ther), adjust = 'none')
 ```
@@ -247,7 +247,7 @@ We add average hours of sleep per weeeknight (`sleep_wknight`) as a continuous
 predictor. First, we check to ensure there are linear relationships between our
 covariates and responses.
 
-```{r}
+```{r, message = FALSE}
 a <- ggplot(df, aes(x = sleep_wknight, y = deprawsc)) +
     geom_point() +
     geom_smooth(method = 'lm') +
@@ -331,7 +331,8 @@ this assignment, we vary our approach by performing a Box-Cox analysis
 to find the optimal $\lambda$ for normality.
 
 ```{r}
-summary(p1 <- powerTransform(cbind(deprawsc, flourish) ~ ther_any + queer + sleep_wknight, data = df, family="yjPower"))
+summary(p1 <- powerTransform(cbind(deprawsc, flourish) ~
+    ther_any + queer + sleep_wknight, data = df, family="yjPower"))
 ```
 
 Box-Cox suggests raising depression to $0.4307$ and flourishing to $2.671$.
@@ -368,5 +369,61 @@ On the other hand, `sleep_wknight` remains consistent.
 Because we conducted multiple univariate tests after our MANOVA, our family-
 wise error rate increased. We don't expect significance to change after
 adjusting for multiple comparisons given our extremely lower $p$-values, but we
-adjust to exercise proper hygiene.
+adjust to exercise proper hygiene. Since our Family-Wise Error Rate has
+increased, we adjust via all Holm's stepdown method, which is ideal for our
+larger dataset where we are not sure that our p-values are independent (which
+would allow us to use Hochberg, the least conserative adjustment method).
 
+```{r}
+p_values <- c(2e-16, 2e-16, 2e-16, 2e-16, 2e-16, 2e-16)
+names(p_values) <- c("Ther_Dep", "Queer_Dep", "Sleep_Dep", 
+                     "Ther_Flour", "Queer_Flour", "Sleep_Flour")
+
+p_holm <- p.adjust(p_values, method = "holm"); p_holm
+```
+
+As expected, given that all $p$-values were `<2e-16` before adjustment, we arrive
+at adjusted $p$-values that are still tiny: $<$ `1.2e-15`. This allows us to
+maintain confidence in the conclusions we drew in Parts 1–5.
+
+Additionally, we perform MRPP, the nonparametric alternative to MANOVA. This is
+the ideal method, as it does not assume multivariate normality---an assumption
+our Chi-Square Q-Q plots revealed was violated in Part 5.
+
+```{r, cache = TRUE}
+set.seed(4747)
+df_subset <- df[sample(nrow(df), 2000), ]
+
+dist_matrix <- vegdist(cbind(df_subset$deprawsc, df_subset$flourish),
+                       method = 'euclidean')
+
+mrpp_queer <- mrpp(dist_matrix, grouping = df_subset$queer)
+mrpp_queer
+```
+
+We take a subset of $2,000$ data points, as our full dataset with $n = 30,323$
+observations would be computationally intensive to run MRPP on. Our analysis
+confirmings our MANOVA findings, yielding a significant difference ($p = 0.001$)
+between groups, with chance-corrected within-group agreement of $A = 0.0271$.
+This confirms the mental health factors (depression and flourishing) of students
+are significantly more similar within sexual orientation groups than would be
+expected by chance. 
+
+```{r, cache = TRUE}
+mrpp_therapy <- mrpp(dist_matrix, grouping = df_subset$ther_any)
+mrpp_therapy
+```
+
+We perform the same analysis on therapy and confirm the same significant
+difference ($p = 0.001$) between groups, with a chance-corrected within-group
+agreement of $A = 0.0096$. This smaller $A$ value indicates that while therapy
+users are distinct from non-users, the distinction between these two groups is
+pronounced than that of the queer / non-queer disparity identified above.
+
+Collectively, our significant results for both variables confirm our findings in
+the previous MANOVA sections (Parts 1-6), which maintained their signifiance in
+the post-adjustment setting for multiple comparisons. Thus, we conclude that
+both the usage of therapy and sexual orientation act as distinct and robust
+determinants of mental health outcomes (depression and flourishing), with
+disparities in depression and flourishing persisting across parametric and non-
+parametric evaluations.
