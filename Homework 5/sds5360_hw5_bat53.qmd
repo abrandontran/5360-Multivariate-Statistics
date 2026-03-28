@@ -1,0 +1,179 @@
+---
+title: "Homework 5: Cluster Analysis"
+subtitle: "S&DS 5360 | Multivariate Statistics"
+author: "Brandon Tran (brandon.tran@yale.edu)"
+date: today
+date-format: "MMMM DD, YYYY"
+format: pdf 
+---
+
+
+
+```{r, include = FALSE}
+library(MASS)
+library(dplyr)
+library(tidyr)
+library(haven)
+library(car)
+library(emmeans)
+library(ggplot2)
+library(patchwork)
+library(heplots)
+library(vegan)
+```
+
+
+
+# Setup & Data Overview
+We continue our work with the Healthy Minds Survey (HMS) data. The variables
+are continuous, but lie on different scales due to the construction of each
+variable (a sum of underlying Likert-scale questions). Our total number of
+observations is $n = 68{,}062$.
+
+- Flourishing (`flourish`): 8–56
+- Depression (`deprawsc`): 0–27
+- Anxiety (`anx_score`): 0–21
+- Loneliness (`lonesc`): 3–9
+- Disordered Eating (`ed_sde`): 0–5
+
+We omit the code to preprocess the data.
+
+```{r, echo = FALSE, cache = TRUE}
+hms_data <- read_sav("../data/hms_data.sav", encoding = 'latin1')
+
+df <- hms_data %>%
+    select(flourish, deprawsc, anx_score, lonesc, ed_sde) %>%
+    na.omit()
+```
+
+
+
+# Part 1 | Distance Metrics, Standardization, and Transformation
+Because we are clustering strictly on continuous, numeric mental health summary
+scores, standard geometric distance metrics are the most appropriate for our
+data. As such, we will elect to use the traditional Euclidean distance
+(straight-line distance between students' standardized score profiles). As a
+secondary metric, we elect to use Manhattan distance, which is less sensitive
+to extreme outliers.
+
+First, recalling our previous analyses on this dataset, we may need to
+transform our variables to normalize our data.
+
+```{r}
+df %>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Score") %>%
+  ggplot(aes(x = Score)) +
+  geom_histogram(bins = 30, fill = "steelblue", color = "black") +
+  facet_wrap(~ Variable, scales = "free") +
+  theme_minimal() +
+  labs(title = "Histograms of Mental Health Variables",
+       x = "Score", y = "Frequency")
+```
+
+The histograms for anxiety, depression, and disordered eating all exhibit right
+skews. Flourish exhibits a left skew, and loneliness retains the underlying
+ordinal structure from its smaller subset of questions. To correct these, we
+propose a log transformation to the right-skewed variables and a square
+transformation to the left-skewed variable. We present the resulting Q-Q plots
+following the transformations:
+
+```{r, cache = TRUE}
+df_transformed <- df %>%
+    mutate(
+        deprawsc_log = log(deprawsc + 1),
+        anx_score_log = log(anx_score + 1),
+        ed_sde_log = log(ed_sde + 1),
+        flourish_sq = flourish^2) %>%
+    select(-deprawsc, -anx_score, -ed_sde, -flourish)
+
+par(mfrow = c(2,3))
+
+df_transformed %>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Score") %>%
+  ggplot(aes(sample = Score)) +
+  stat_qq(color = "black", alpha = 0.5) +
+  stat_qq_line(color = "red") + 
+  facet_wrap(~ Variable, scales = "free") +
+  theme_minimal() +
+  labs(title = "Q-Q Plots of Transformed Mental Health Variables",
+       x = "Theoretical Normal Quantiles",
+       y = "Actual Sample Quantiles")
+```
+
+We see a staircase effect in the Q-Q plots, which is inherent to the bounded
+survey data we are working with; transformations cannot change this. However,
+a bulk of our observations follow the Q-Q line, and observe that our post-log
+transformed variables exhibit lighter tails, meaning our outliers were pulled
+inward. This ensures that extreme outliers will not disproportionally inflate
+the Euclidean distance calculations between students. We see a similar effect
+with our squared `flourish` variable.
+
+As can be observed in the overview in the previous section, each continuous
+variable exists along a different scale. We will need to standardize our
+variables; else, flourishing and other variables with lage ranges will
+dominate. To standardize, we convert our scores to Z-scores ($Z \sim N(0,1)$).
+
+```{r}
+df_scaled <- scale(df_transformed)
+```
+
+
+
+# Part 2 | Hierarchical Cluster Analysis
+With our data transformed and scaled, we now perform hierarchical cluster
+analysis. Given we are working with continuous data, we will compare both
+Euclidean and Manhattan distances across Ward's, complete, and average
+linkage:
+
+- **Euclidean + Ward's:** The literature supports this as the most balanced
+approach for our continuous data. We will use this as our baseline for
+comparison with the other methods.
+- **Euclidean + Complete Linkage:** Controlling for our distance metric, this
+comparison allows us to isolate how changing the agglomeration method (from
+minmized variance to furthest neighbor) changes our clusters.
+- **Manhattan + Complete Linkage:** Controlling for agglomeration method, we
+can see how changing our distance metric impacts the tree.
+- **Manhattan + Average Linkage:** Another comparison to further analyze the
+outlier-resistant nature of Manhattan distance.
+
+Note that we will need to sample our data to $n = 5,000$ for computational
+feasibility. Our true sample size exceeds the maximum limitation for the
+`hclust()` function.
+
+```{r}
+# Sample n = 5,000
+set.seed(4747)
+df_sample <- as.data.frame(df_scaled) %>% sample_n(5000)
+
+# Calculate Distance Metrics
+dist_eucl <- dist(df_sample, method = "euclidean")
+dist_manh <- dist(df_sample, method = "manhattan")
+
+# Run Cluster Analysis
+hc_eucl_ward <- hclust(dist_eucl, method = "ward.D")
+hc_eucl_comp <- hclust(dist_eucl, method = "complete")
+hc_manh_comp <- hclust(dist_manh, method = "complete")
+hc_manh_avg <- hclust(dist_manh, method = "average")
+
+# Plot
+par(mfrow = c(2, 2))
+plot(hc_eucl_ward, labels = FALSE, cex = 0.5, 
+     xlab = "", ylab = "Distance", main = "Euclidean + Ward's", sub = "")
+plot(hc_eucl_comp, labels = FALSE, cex = 0.5, 
+     xlab = "", ylab = "Distance", main = "Euclidean + Complete", sub = "")
+plot(hc_manh_comp, labels = FALSE, cex = 0.5, 
+     xlab = "", ylab = "Distance", main = "Manhattan + Complete", sub = "")
+plot(hc_manh_avg, labels = FALSE, cex = 0.5, 
+     xlab = "", ylab = "Distance", main = "Manhattan + Average", sub = "")
+```
+
+The resulting dendrograms visibly demonstrate how different agglomeration
+methods handle dense survey data like ours. Euclidean + Ward suggests between
+3–5 distinct clusters. When we switch to complete linkage, instead of forming
+distinct tree trunks, the data clumps into a massive, dense blob, with small
+individual branches very close to the top.  Generally, complete and average
+linkage methods were difficult to interpret, suffering from severe chaining and
+highly unbalanced tree structures with poorly defined separation at higher
+distances. Meanwhile, Euclidean distance paired with Ward's method produced a
+highly intepretable denderogram, minimizing within-cluster variance and
+separating the data into distinct, balanced branches.
