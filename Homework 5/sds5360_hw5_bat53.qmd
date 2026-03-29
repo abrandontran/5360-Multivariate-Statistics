@@ -12,14 +12,13 @@ format: pdf
 ```{r, include = FALSE}
 library(MASS)
 library(dplyr)
-library(tidyr)
-library(haven)
-library(car)
-library(emmeans)
 library(ggplot2)
-library(patchwork)
-library(heplots)
-library(vegan)
+library(NbClust)
+library(haven)
+library(tidyr)
+library(knitr)
+library(kableExtra)
+source("https://raw.githubusercontent.com/jreuning/sds363_code/refs/heads/main/HClusEval3.R.txt")
 ```
 
 
@@ -140,7 +139,7 @@ Note that we will need to sample our data to $n = 5,000$ for computational
 feasibility. Our true sample size exceeds the maximum limitation for the
 `hclust()` function.
 
-```{r}
+```{r, cache = TRUE, fig.width = 8, fig.height = 6, out.width = "100%"}
 # Sample n = 5,000
 set.seed(4747)
 df_sample <- as.data.frame(df_scaled) %>% sample_n(5000)
@@ -177,3 +176,164 @@ highly unbalanced tree structures with poorly defined separation at higher
 distances. Meanwhile, Euclidean distance paired with Ward's method produced a
 highly intepretable denderogram, minimizing within-cluster variance and
 separating the data into distinct, balanced branches.
+
+
+
+# Part 3 | Discussion on Groups
+To confirm the 3–5 clusters that we visually assessed from the Euclidean + Ward
+analysis in Part 2, we mathematically evaluate the number of clusters needed
+via `NbClust` and the courses's custom `HClusEval`. We perform this on a small
+sample of data ($n = 1{,}000$) for computational purposes.
+
+```{r, cache = TRUE, message = FALSE, warning = FALSE}
+set.seed(4747)
+df_sample <- as.data.frame(df_scaled) %>% sample_n(1000)
+
+par(mfrow = c(1, 2))
+
+eval <- hclus_eval(df_sample, dist_m = 'euclidean', clus_m = 'ward',
+           plot_op = T, print_num = 10)
+
+nb_results <- NbClust(df_sample, distance = 'euclidean', min.nc = 2,
+                      max.nc = 10, method = 'ward.D', index = 'all',
+                      alphaBeale = 0.1)
+```
+
+Visual inspection of the evaluation plots reveal a distinct elbow in the R-
+Squared (RSQ) trajectory at $k = 4$ clusters, with diminishing returns in 
+explained variance beyond this point. The Hubert statistic and D-index second
+difference plots also exhibited significant peaks at $k = 4$. The `NbClust`
+majority rule confirms our visual assessment, concluding that $k = 4$ is the
+optimal number of clusters based on $11$ voting indices. For reference, a
+visualization of these four clusters is plotted below:
+
+
+```{r}
+par(mfrow = c(1, 1))
+cuts <- cutree(hc_eucl_ward, k = 4)
+plot(hc_eucl_ward, labels = FALSE, cex = 0.6, xlab = "", ylab = "Distance",
+     main = "Clustering of HMS Students", sub = '')
+rect.hclust(hc_eucl_ward, k = 4)
+```
+
+We proceed with $k = 4$ for our final $k$-means partitioning.
+
+
+# Part 4 | $k$-Means
+We perform $k$-means clustering on our data and compare with our results from
+Part 3. Note that to ensure model convergence with our large sample size, we
+use the MacQueen algorithm with $50$ iterations.
+
+```{r, warning = FALSE, message = FALSE}
+set.seed(4747)
+
+wss <- numeric(10) 
+
+for (k in 1:10) {
+  wss[k] <- kmeans(df_scaled, centers = k, nstart = 25,
+                   iter.max = 50, algorithm = "MacQueen")$tot.withinss
+}
+
+plot(1:10, wss, type = "b", pch = 19, col = "blue", lwd = 2,
+     xlab = "Number of Clusters (k)", 
+     ylab = "Total Within-Cluster Sum of Squares (WSS)",
+     main = "K-Means Elbow Method")
+
+final_kmeans <- kmeans(df_scaled, centers = 4, nstart = 25,
+                       iter.max = 50, algorithm = "MacQueen")
+
+df_final <- df %>%
+  mutate(Cluster = as.factor(final_kmeans$cluster))
+```
+
+Our Total Within-Cluster Sum of Squares (WSS) plot exhibits a distinct elbow
+at $k = 4$, thereafter which the steep reduction in variance begins to plateau.
+When comparing these results to the hierarchical analysis in Step 3, the
+findings are consistent (though an elbow at $k=2$ could also be discerned in
+this method). Thus, both the objective mathematical indices and the visual $k$-
+means elbow plot independently suggest $k = 4$ natural groupings within our
+data.
+
+
+
+# Steps 5–6 | Visualization in PCA Space
+Because the data we are working with exists in $5$-dimensional space, we
+collapse our data in to just two dimensions to help us visualize our groupings.
+While we could use both PCA and discriminant analysis, both methods of which
+we've previously used on this dataset, we elect to use PCA because it is an
+unsupervised method, whereas discirminant analysis is supervised. That is, PCA
+will serve as an unbiased canvas for us to visualize our groups on.
+
+```{r}
+pca <- prcomp(df_scaled)
+
+pca_data <- data.frame(
+  PC1 = pca$x[, 1],
+  PC2 = pca$x[, 2],
+  Cluster = as.factor(final_kmeans$cluster)
+)
+
+ggplot(pca_data, aes(x = PC1, y = PC2, color = Cluster)) +
+  geom_point(alpha = 0.1, size = 1) + 
+  guides(color = guide_legend(override.aes = list(alpha = 1, size = 4))) + 
+  theme_minimal() +
+  labs(title = "K-Means Clusters Visualized via PCA (k=4)",
+       x = "Principal Component 1",
+       y = "Principal Component 2",
+       color = "Cluster")
+```
+
+We see four distinct clusters in along our two-dimensional principal axes,
+confirming our previous analyses. While some boundary overlap exists, this is
+expected; the clusters themselves are largely continuous with dense central
+hotspots. We do observe some striping within the clusters, notably cluster #3
+(in blue), but this is likely an artifact of the discrete, bounded nature of
+the underlying Likert-scaled survey data.
+
+
+
+# Step 7 | Final Analysis of Groups
+With multiple independent analyses confirming that $k=4$ groups exist within
+our data, we endeavor to assign a meaning to each group. To do this, we present
+the average scores per variable, per cluster:
+
+```{r}
+cluster_profiles <- df_final %>%
+  group_by(Cluster) %>%
+  summarise(
+    Count = n(), 
+    Mean_Flourish = round(mean(flourish, na.rm = TRUE), 2),
+    Mean_Depress  = round(mean(deprawsc, na.rm = TRUE), 2),
+    Mean_Anxiety  = round(mean(anx_score, na.rm = TRUE), 2),
+    Mean_Eating   = round(mean(ed_sde, na.rm = TRUE), 2),
+    Mean_Lonely   = round(mean(lonesc, na.rm = TRUE), 2)
+  )
+```
+
+```{r, echo = FALSE}
+kable(cluster_profiles, 
+      format = "latex",
+      booktabs = TRUE,
+      col.names = c("Cluster", "Student Count", "Flourishing", 
+                    "Depression", "Anxiety", "Eating Concerns", "Loneliness"),
+      align = "c",
+      caption = "Final K-Means Cluster Profiles (k=4)") %>%
+  kable_styling(latex_options = c("striped", "HOLD_position"), 
+                full_width = FALSE,
+                font_size = 10) %>%
+  row_spec(0, bold = TRUE)
+```
+
+Most notably, Cluster 4 stands out as our thriving baseline, exhibiting the
+highest flourishing score and, conversely, extremely low scores across all
+negative psychological variables. Meanwhile, Cluster 2 seems to represent our
+most high-risk population, with the lowest flourishing score and highest
+scores across negative psychological variables. Cluster 3 is unique: while at
+first glance, these students appear to be high-functioning, exhibiting high
+flourishing scores and relatively low depression and anxiety, their eating
+concern score is dramatically elevated compared to baseline. Thus, they likely
+form an at-risk group unique to disordered eating. Finally, Cluster 1 seems to
+be comprised of the opposite: relatively elevated depression, anxiety, and
+loneliness, but with the lowest eating concern score. This seems to indicate
+a population dealing with generalized, sub-clinical internalizing symptoms who
+do not engage in disordered eating behaviors.
