@@ -75,13 +75,13 @@ hms_ca <- cca(hms_symptoms)
 summary(hms_ca)
 ```
 
-We see that our total inertia is $0.1073$, representing the total varaince in
+We see that our total inertia is $0.1073$, representing the total variance in
 our data (calculated as a scaled chi-square statistic). Axis 1 (CA1) explains
 $16.48\%$ of the variance, while Axis 2 (CA2) explains $10.56\%$, or together,
 $27.04\%$ of the variance in total.
 
 Observe on our two-dimensional plot of Axes 1 and 2 that our clustered symptoms
-in blue text tightly ovelap near the origin $(0, 0)$. Because there are so many
+in blue text tightly overlap near the origin $(0, 0)$. Because there are so many
 students pulling the axes outward, the variation among symptoms themselves make
 them appear clumped in the middle. We provide a zoomed-in view on the right-
 hand size to more easily discern the symptoms.
@@ -159,9 +159,9 @@ hms_nmds3 <- metaMDS(hms_symptoms_subset, distance = "bray", k = 3, trymax = 50)
 
 Note that we manually set `trymax = 50` to ensure the algorithm incorporates
 enough random starts to reliably find the global optimum within a reasonable
-number of runs. Furthermore, we sample $500$ rows from our data, as our datset
-containing $33{,}100$ rows of symptom data is comptuationally expensive and
-unncessary for ordination.
+number of runs. Furthermore, we sample $500$ rows from our data, as our dataset
+containing $33{,}100$ rows of symptom data is comptutationally expensive and
+unnecessary for ordination.
 
 ```{r, fig.height = 4, fig.width = 8, out.width = "100%"}
 par(mfrow = c(1,1))
@@ -183,8 +183,8 @@ text(pl$xyz.convert(sp), rownames(sp), col = "blue", font = 2, cex = 1)
 
 In the above plots, we see:
 - **1D NMDS:** The 1-dimensional plot forces all symptom variance onto a single axis, resulting in an overcrowded plot from which it is difficult to discern meaningful relationships between individual symptoms.
-- **2D NMDS:** The 2-dimensional plot reveals a much clearer mapping of the symptom space. Observe the extreme observation `phq9_9` on the far left-hand side; this question specifically measures suicidal ideation and self-harm. The remaining general anxiety and depression symptms form a looser cluster on the right. The visual separation makes sense: self harm is distinctly different from other, less severe depressive symptoms and requires acute care. A less drastic, but still notable, distinction is the vertical axis, which separates symptoms by clinical nature. Note that `phq_3` (sleep), `phq_4` (fatigue), and `phq_5` (appetite) cluster together at a distinctly lower elevation on the second axis. These questions represent the pysical manifestations of depression. In contrast, the items situated higher on the y-axis are predominantly `GAD-7` anxiety variables, such as uncontrollable worry and feeling on edge. This indicates that the NMDS algorithm successfully captured the latent structural divide between physical exhaustion and depressive symptoms compared to anxious states among the student population.
-- **3D NMDS:** The 3-dimensional plot adds an additional axis for depth which is not immmediately helpful. While it helps pull apart hte main cluster of symptoms that overlap in 2D, the overall topology remains the same, with `phq9_9` retaining the same distinct separation.
+- **2D NMDS:** The 2-dimensional plot reveals a much clearer mapping of the symptom space. Observe the extreme observation `phq9_9` on the far left-hand side; this question specifically measures suicidal ideation and self-harm. The remaining general anxiety and depression symptoms form a looser cluster on the right. The visual separation makes sense: self harm is distinctly different from other, less severe depressive symptoms and requires acute care. A less drastic, but still notable, distinction is the vertical axis, which separates symptoms by clinical nature. Note that `phq_3` (sleep), `phq_4` (fatigue), and `phq_5` (appetite) cluster together at a distinctly lower elevation on the second axis. These questions represent the physical manifestations of depression. In contrast, the items situated higher on the y-axis are predominantly `GAD-7` anxiety variables, such as uncontrollable worry and feeling on edge. This indicates that the NMDS algorithm successfully captured the latent structural divide between physical exhaustion and depressive symptoms compared to anxious states among the student population.
+- **3D NMDS:** The 3-dimensional plot adds an additional axis for depth which is not immmediately helpful. While it helps pull apart the main cluster of symptoms that overlap in 2D, the overall topology remains the same, with `phq9_9` retaining the same distinct separation.
 
 ```{r}
 # Print stress numbers
@@ -240,7 +240,7 @@ value of $0.3228$, follwed in magnitude by `fincur`, `internet1`, and finally,
 `exercise.` This tells us that loneliness, particularly, is a huge driver of
 where students land in the symptom space.
 
-```{r}
+```{r, fig.width = 8, fig.height = 8, out.width = "100%"}
 plot(hms_nmds2, type = "n", main = "NMDS with Environmental Vectors")
 points(hms_nmds2, display = "sites", col = "lightgrey", pch = 16, cex = 0.5)
 text(hms_nmds2, display = "species", col = "blue", cex = 0.9, font = 2)
@@ -257,16 +257,83 @@ sits. This seems to indicate that while loneliness is a major driver behind
 anxiety and depression, financial stress, in particular, seems to be a major
 driver behind more severe suicidal ideation.
 
-```{r}
+```{r, fig.width = 8, fig.height = 8, out.width = "100%"}
 plot(hms_nmds2, type = "n", main = "NMDS Wireplot: Loneliness Gradient")
 points(hms_nmds2, display = "sites", col = "lightgrey", pch = 16, cex = 0.5)
 text(hms_nmds2, display = "species", col = "blue", cex = 0.9, font = 2)
-surf_lone <- ordisurf(hms_nmds2, hms_env_subset$lonesc, add = TRUE, col = "darkgreen", lwd = 2)
+surf_lone <- ordisurf(hms_nmds2, hms_env_subset$lonesc, add = TRUE,
+                      col = "darkgreen", lwd = 2)
 ```
 
+We further study loneliness given its large correlation of $0.3228$ by
+generating a 2-dimensional wireplot. Recall that the green lines represent
+average loneliness scores, which generally increase from left to right as we
+shift towards the dense cluster of anxiety and depression symptoms on the right.
 
-
-```{r}
+```{r, fig.width = 8, fig.height = 8, out.width = "100%"}
 vis.gam(surf_lone, main = "3D Surface of Loneliness over NMDS Space", 
         theta = -45, phi = 30, color = "topo")
 ```
+
+Now, observe the 3D surface plot of loneliness over NMDS space. The highest
+elevation (in yellow and orange) corresponds to higest loneliness scores,
+confirming that extreme loneliness maps into the clustered symptom space as we
+have seen previously.
+
+
+
+# Part 9 | Canonical Correspondence Analysis (CCA)
+Finally, we use loneliness, financial stress, and internet use (our strongest
+correlated variables) to constrain a Canonical Correspondence Analysis (CCA)
+model.
+
+```{r}
+# Model
+hms_cca <- cca(hms_symptoms_subset ~ lonesc + fincur + internet_1,
+               data = hms_env_subset)
+summary(hms_cca)
+```
+
+Immediately observe that our total inertia is $0.1018$, but our constrained
+inertia (the amount of variance explained by our selected continuous variables)
+is only $0.0014$, or a mere $1.39\%$. We produce a triplot to analyze:
+
+```{r}
+# Plot
+plot(hms_cca, type = "n", main = "Canonical Correspondence Analysis (CCA)")
+points(hms_cca, display = "sites", col = "lightgrey", pch = 16, cex = 0.5)
+text(hms_cca, display = "species", col = "blue", cex = 1, font = 2)
+text(hms_cca, display = "bp", col = "red", font = 2, cex = 1.2)
+```
+
+Because the environmental variables explain almost none of the overall symptom
+variance, the algorithm cannot use them to pull the symptoms apart. Thus, all
+sixteen symptom variables (in blue) are collapsed into a single, unreadable
+dot at the origin. This feels like a stark contrast to our expectations given
+the significance we found in the previous parts. However, while these variables
+are indeed significantly correlated with  distress, it seems they are not the
+primary, overarching structural drivers of the specific symptom combinations
+that students experience.
+
+
+
+# Part 10 | Conclusion
+Given our findings from the three ordination techniques applied across Parts
+1–9, NMDS emerged as the most robust and informative method. Because the `PHQ-9`
+and `GAD-7` scores rely on ordinal frequency scales with high rates of joint
+absences (many "0" responses for severe symptoms), the rank-based approach of
+NMDS paired with the Bray-Curtis distance metric preserved the topological
+structure of the data far better than the chi-square distances used in
+Correspondence Analysis (CA). Furthermore, indirect gradient analysis (NMDS
+with overlays) proved vastly superior to direct gradient analysis (CCA). The
+CCA demonstrated that forcing the symptom axes to be linear combinations of 
+environmental variables explained only $1.4\%$ of the variance.
+
+Ultimately, the NMDS approach successfully mapped a latent gradient of
+psychological distress, effectively separating physical and depressive symptoms
+from anxiety, while correctly isolating severe clinical manifestations like
+suicidal ideation and self harm. Overlaying variables like loneliness via GAM
+surfaces provided critical context, proving that while demographic and lifestyle
+factors are deeply entangled with the severity of a student's distress, the
+overarching architecture of their mental health symptoms is highly complex,
+non-linear, and driven by latent factors beyond basic survey demographics.
