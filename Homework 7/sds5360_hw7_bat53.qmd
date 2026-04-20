@@ -20,6 +20,7 @@ library(kableExtra)
 library(tidyverse)
 library(corrplot)
 library(EFAtools)
+library(psych)
 ```
 
 
@@ -36,7 +37,7 @@ Factor Analysis, we will select three distinct survey groups
 We omit the code to preprocess the data.
 
 ```{r, echo = FALSE, cache = TRUE}
-hms_data <- read_sav("data/hms_data.sav", encoding = 'latin1')
+hms_data <- read_sav("../data/hms_data.sav", encoding = 'latin1')
 
 fa_vars <- c(
   "phq9_1", "phq9_2", "phq9_3", "phq9_4", "phq9_5", "phq9_6", "phq9_7", "phq9_8", "phq9_9",
@@ -109,7 +110,7 @@ Next, to determine the appropriate number of latent factors to use for our
 analysis, we use both parallel analysis and our traditional scree plot and 
 eigenvalue interpretation from principal components analysis.
 
-```{r, fig.width = 8, fig.height = 6, width.out = '100%', cache = TRUE}
+```{r, fig.width = 8, fig.height = 4, width.out = '100%', cache = TRUE, warning = FALSE, message = FALSE}
 # Parallel Analysis
 PARALLEL(df)
 
@@ -131,3 +132,198 @@ below $1.0$, as well as the fact that our data come from four distinct
 measurement groups (`PHQ`, `GAD`, etc.), it makes the most sense to proceed with
 $4$ latent factors.
 
+
+
+# Part 5 | Factor Analyses
+We now perform a series of factor analyses using orthogonal models with 4 latent
+factors. We elect to compare all four presented extraction methods: Principal
+Components, Principal Axis Factoring, Iterative PCA, and Maximum Likelihood. We
+will evaluate each method based on their root mean squared residual (RSMR),
+focusing on the percentage of residuals that exceed $0.05$.
+
+```{r}
+# Principal Components Analysis (PCA)
+fact_pca <- principal(df, nfactors = 4, rotate = "varimax")
+repro_pca <- fact_pca$loadings %*% t(fact_pca$loadings)
+resid_pca <- cor(df) - repro_pca
+len_pca <- length(resid_pca[upper.tri(resid_pca)])
+rmsr_pca <- sqrt(sum(resid_pca[upper.tri(resid_pca)]^2) / len_pca)
+prop_pca <- sum(abs(resid_pca[upper.tri(resid_pca)]) > 0.05) / len_pca * 100
+
+# Principal Axis Factoring (PAF)
+fact_paf <- fa(df, nfactors = 4, rotate = "varimax", fm = "pa")
+repro_paf <- fact_paf$loadings %*% t(fact_paf$loadings)
+resid_paf <- cor(df) - repro_paf
+len_paf <- length(resid_paf[upper.tri(resid_paf)])
+rmsr_paf <- sqrt(sum(resid_paf[upper.tri(resid_paf)]^2) / len_paf)
+prop_paf <- sum(abs(resid_paf[upper.tri(resid_paf)]) > 0.05) / len_paf * 100
+
+# Iterative PCA
+fact_ipca <- fa(df, nfactors = 4, rotate = "varimax", SMC = FALSE, fm = "pa")
+repro_ipca <- fact_ipca$loadings %*% t(fact_ipca$loadings)
+resid_ipca <- cor(df) - repro_ipca
+len_ipca <- length(resid_ipca[upper.tri(resid_ipca)])
+rmsr_ipca <- sqrt(sum(resid_ipca[upper.tri(resid_ipca)]^2) / len_ipca)
+prop_ipca <- sum(abs(resid_ipca[upper.tri(resid_ipca)]) > 0.05) / len_ipca * 100
+
+# Maximum Likelihood
+fact_ml <- factanal(df, factors = 4, rotation = "varimax")
+repro_ml <- fact_ml$loadings %*% t(fact_ml$loadings)
+resid_ml <- cor(df) - repro_ml
+len_ml <- length(resid_ml[upper.tri(resid_ml)])
+rmsr_ml <- sqrt(sum(resid_ml[upper.tri(resid_ml)]^2) / len_ml)
+prop_ml <- sum(abs(resid_ml[upper.tri(resid_ml)]) > 0.05) / len_ml * 100
+```
+
+```{r, echo = FALSE}
+extraction_results <- data.frame(
+  Method = c("Maximum Likelihood (ML)", 
+             "Principal Axis Factoring (PAF)", 
+             "Iterative PCA", 
+             "Principal Components (PCA)"),
+  RMSR = c(0.0269, 0.0260, 0.0260, 0.0392),
+  Residuals = c("7.59%", "6.67%", "6.67%", "14.25%")
+)
+
+# 2. Rename columns for the table output
+colnames(extraction_results) <- c("Extraction Method", "RMSR", "% Residuals > 0.05")
+
+# 3. Generate the kable table formatted for LaTeX/PDF
+kable(extraction_results, format = "latex", booktabs = TRUE, 
+      caption = "Comparison of Factor Extraction Methods (4-Factor Model)",
+      align = c("l", "c", "c")) %>%
+  kable_styling(latex_options = c("HOLD_position", "striped"), 
+                full_width = FALSE, 
+                position = "center") %>%
+  row_spec(0, bold = TRUE) %>%
+  # Highlight rows 2 and 3 (PAF and Iterative PCA) since they tied for the best fit
+  row_spec(c(2, 3), bold = TRUE)
+```
+
+We see that PCA performs the worst, yielding the highest RMSR of $0.0392$ and
+a substantial $14.25\%$ of residuals above the $0.05$ threshold. This matches
+our expecations, given PCA analyzes total variance instead of isolating shared
+latent variance. Meanwhile, maximum likelihood yielded improved performance,
+with an RMSR of $0.0269$ and only $7.59\%$ above the threshold.
+
+Both principal axis factoring and iterative PCA converged to the same limits,
+and thus, they both are our strongest performers, with an RMSR of $0.0260$ and
+$6.67\% > 0.05$. We elect to proceed with principal axis factoring given its
+more commonplace usage with psychological constructs like ours, but we would
+feel equally comfortable continuing with iterative PCA.
+
+
+
+# Part 6 | Rotations
+Now, we explore two rotational methods: varimax, which maximizes the variance
+of squared loadings (encouraging each latent factor to be comprised of distinctly
+correlated questions), and quartimax, which minimizes the number of factors
+needed to explain each variable (encouraging incorporation of as many questions
+as possible on to the same latent factor).
+
+```{r, warning = FALSE, message = FALSE}
+# Varimax
+paf_varimax <- fa(df, nfactors = 4, rotate = 'varimax', fm = 'pa')
+# Quartimax
+paf_quartimax <- fa(df, nfactors = 4, rotate = 'quartimax', fm = 'pa')
+```
+
+```{r, echo = FALSE}
+loadings_varimax <- unclass(paf_varimax$loadings)
+loadings_quartimax <- unclass(paf_quartimax$loadings)
+
+# 2. Bind them side-by-side into one large matrix
+combined_loadings <- cbind(loadings_varimax, loadings_quartimax)
+
+# 3. Clean the data: Round to 3 decimals and hide weak correlations (< 0.3)
+combined_loadings <- round(combined_loadings, 3)
+combined_loadings[abs(combined_loadings) < 0.3] <- ""
+
+# 4. Convert to a data frame so kable can read it
+df_loadings <- as.data.frame(combined_loadings)
+
+# Rename the columns so they are clean (4 for Varimax, 4 for Quartimax)
+colnames(df_loadings) <- c("PA1", "PA2", "PA3", "PA4", "PA1", "PA2", "PA3", "PA4")
+
+# 5. Generate the LaTeX-formatted PDF table
+kable(df_loadings, format = "latex", booktabs = TRUE, 
+      caption = "Comparison of Varimax and Quartimax Factor Loadings",
+      align = "c") %>%
+  kable_styling(latex_options = c("scale_down", "striped", "HOLD_position"), 
+                font_size = 9) %>%
+  # This adds the overarching super-headers!
+  add_header_above(c(" " = 1, "Varimax Rotation" = 4, "Quartimax Rotation" = 4)) %>%
+  # Make the variable names bold
+  column_spec(1, bold = TRUE) %>%
+  # Add a vertical divider line between the Varimax and Quartimax sections
+  column_spec(5, border_right = TRUE)
+```
+
+Observe under quartimax that for `PA1`, almost every single `phq9` and `gad7`
+question was loaded, combining depression and anxiety into the same latent
+factor. As a result, we see that `PA4` has become almost useless, explaining
+only $3\%$ of the variance. Meanwhile, for the varimax loadings, we see
+largely separable columns:
+
+- `PA1` contains the flourishing (`diener`) questions
+- `PA2` contains the `phq9` (depression) questions
+- `PA3` contains the `gad7` (anxiety) questions, and
+- `PA4` contains the `BRS` (resilience) questions.
+
+As expected, there is overlap between `PA2` and `PA3` given the comorbidity of
+depression and anxiety.
+
+```{r, fig.width = 8, fig.height = 4, width.out = '100%', cache = TRUE}
+par(mfrow = c(1,2))
+
+# Varimax
+plot(paf_varimax$loadings[, c(1, 2)], pch = 18, col = 'red', 
+     main = "Varimax (PA1 vs PA2)", xlim = c(-1, 1), ylim = c(-1, 1))
+abline(h = 0, lty = 2); abline(v = 0, lty = 2)
+text(paf_varimax$loadings[, c(1, 2)], labels = rownames(paf_varimax$loadings), 
+     cex = 0.7, pos = 4, col = "blue")
+
+# Quartimax
+plot(paf_quartimax$loadings[, c(1, 2)], pch = 18, col = 'red', 
+     main = "Quartimax (PA1 vs PA2)", xlim = c(-1, 1), ylim = c(-1, 1))
+abline(h = 0, lty = 2); abline(v = 0, lty = 2)
+text(paf_quartimax$loadings[, c(1, 2)], labels = rownames(paf_quartimax$loadings), 
+     cex = 0.7, pos = 4, col = "darkgreen")
+```
+
+The loading plots confirm this distinction. In the varimax plot of PA1 versus
+PA2, the variable clusters tightly hug the axes (e.g., flourishing questions 
+load along the vertical axis). In contrast, the quartimax plot shows variables
+floating somewhat ambiguously within the quadrants, visually demonstrating
+cross-loadings across multiple dimensions. Thus, we proceed with the varimax
+method, presenting all four dimensions via a pairs plot:
+
+```{r, fig.width = 8, fig.height = 8, width.out = '100%', cache = TRUE}
+pairs(paf_varimax$loadings, 
+      main = "Varimax Loadings Matrix (All 4 Dimensions)",
+      pch = 18, col = "blue", cex = 1.2)
+```
+
+We see groupings of questions sitting along the vetical and horizontal axes,
+indicating clear separation and simple structure. Even with both depression
+(PA2) and anxiety (PA3), which we know are correlated variables, we see that
+these have been separated into distinct dimensions, give or take some slight
+dispersion that reflects the known comorbidity between the two conditions.
+
+
+
+# Part 7 | Summary
+Our exploratory factor analysis successfully identified the latent constructs
+driving mental health and well-being indicators among the students represented
+in the 2024–25 Healthy Minds Survey. Initial diagnostics indicated excellent
+sampling adequacy, with an overall KMO of $0.959$. Subsequently, parallel
+analysis indicated the presence of four distinct latent factors. A comparison
+of four orthogonal models via RMSR and two rotational methods brought us to
+decide to utilize principal axis factoring with a varimax rotation.
+
+This approach cleanly resolved our 30 questions into four distinct dimensions that
+directly map to the questions coded categories: depression, flourishing, anxiety,
+and resilience. While slight cross-loadings between anxiety and depression reflect
+their known clinical comorbidity, the model demonstrates that students' mental
+health profiles are well structured along these four distinct axes of distress
+and well-being.
