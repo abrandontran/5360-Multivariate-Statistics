@@ -1,0 +1,280 @@
+---
+title: "Homework Set 1"
+subtitle: "S&DS 5360 | Multivariate Statistics"
+author: "Brandon Tran (bat53)"
+date: today
+date-format: "MMMM DD, YYYY"
+format: 
+    pdf:
+        geometry: 
+            - margin=1in
+        colorlinks: true
+---
+
+
+
+# Problem 1
+
+We have the vectors:
+
+$$
+\mathbf{a} = \begin{bmatrix}
+    5 & 1 & 14 & 3 & -5 & 12 & -20
+\end{bmatrix}
+$$
+
+and
+
+$$
+\mathbf{b} = \begin{bmatrix}
+    0 & 2 & -4 & 10 & 4 & -3 & -4
+\end{bmatrix}
+$$
+
+Which we store in `R` as:
+```{r}
+a <- c(5, 1, 14, 3, -5, 12, -20)
+b <- c(0, 2, -4, 10, 4, -3, -4)
+```
+
+
+## (a) $\mathbf{a+b}$
+```{r}
+a+b
+```
+
+
+## (b) $\mathbf{3a-4b}$
+```{r}
+3*a - 4*b
+```
+
+
+## (c) Length of $\mathbf{a}$
+In this case, length denotes the Euclidean Norm, or magnitude $||\mathbf{a}|| = \sqrt{\sum a_i^2}$.
+```{r}
+sqrt(sum(a^2))
+```
+
+
+## (d) Scalar product $\mathbf{ab}$
+```{r}
+a %*% b
+```
+
+
+## (e) Interpretation of (d)
+Since the scalar (dot) products of $\mathbf{a}$ and $\mathbf{b}$ is $0$, we can conclude that the vectors are orthogonal.
+
+
+
+# Problem 2
+
+Consider the vector:
+$$
+\mathbf{a} = \begin{bmatrix}
+    10 & 6 & -5
+\end{bmatrix}
+$$
+
+Which we store in `R` as:
+```{r}
+a <- c(10, 6, -5)
+```
+
+
+## (a)
+Define the three-dimensional standard basis vectors to be $\mathbf{e}_1 = (1,0,0)$, $\mathbf{e}_2 = (0,1,0)$, and $\mathbf{e}_3 = (0,0,1)$. It follows, then, that 
+
+$$
+\mathbf{a} = (10 \times \mathbf{e}_1) + (6 \times \mathbf{e}_2) - (5 \times \mathbf{e}_3)
+$$
+
+
+## (b)
+Recall the geometric definition of the dot product:
+
+$$
+\begin{aligned}
+\mathbf{a} \cdot \mathbf{b} &= ||\mathbf{a}||||\mathbf{b}||\cos(\theta) \\
+\cos(\theta) &= \frac{\mathbf{a} \cdot \mathbf{e}_2}{||\mathbf{a}||||\mathbf{e}_2||} \\
+&= \frac{6}{||\mathbf{a}||}
+\end{aligned}
+$$
+
+We use `R` to calcuate this to be:
+```{r}
+6/sqrt(sum(a^2))
+```
+
+
+## (c)
+The subspace spanned by $\mathbf{e}_2$ and $\mathbf{e}_3$ is the yz-plane. The projection of $\mathbf{a}$ onto this plane is therefore $\mathbf{a}_{\text{proj}} = (0, 6, -5)$.
+
+
+
+# Problem 3
+
+
+## (a)
+The resulting matrix is a $1 \times 3$ matrix.
+
+
+## (b)
+The resulting matrix is a $12 \times 9$ matrix.
+
+
+## (c)
+These two matrices cannot be multipled, as the vector $\mathbf{a}$ only has one column, which does not match the three rows of $\mathbf{B}$.
+
+
+## (d)
+The resulting matrix is a $1 \times 12$ matrix.
+
+
+
+# Problem 4
+Recall that a matrix is invertible if its inverse exists. That is, $\exists \mathbf{A}^{-1}$ s.t. $\mathbf{A}\mathbf{A}^{-1} = \mathbf{I}$, which guarantees that the rows and coumns of $\mathbf{A}$ are all linearly independent. For the provided matrix, note that column 3 is the sum of columns 1 and 2. Thus, the matrix is **not invertible.**
+
+
+
+# Problem 5
+We wish to calculate the characteristic equation and eigenvalues for the following matrix:
+
+$$
+\begin{bmatrix}
+1 & 3 \\
+2 & 4 \\
+\end{bmatrix}
+$$
+
+Given a constant $\lambda$ and identity matrix $\mathbf{I}$, define
+
+$$
+\mathbf{A} - \lambda \mathbf{I} = 
+\begin{bmatrix}
+1 & 3 \\
+2 & 4 \\
+\end{bmatrix} -
+\lambda \begin{bmatrix}
+1 & 0 \\
+0 & 1 \\
+\end{bmatrix} = 
+\begin{bmatrix}
+1-\lambda & 3 \\
+2 & 4-\lambda \\
+\end{bmatrix}
+$$
+
+The determinant of this matrix is:
+
+$$
+|\mathbf{A} - \lambda \mathbf{I}| = (1-\lambda)(4-\lambda) - 6
+$$
+
+Setting this equation to zero and solving for $\lambda$ yields the characteristic equation:
+
+$$
+\boxed{\lambda^2-5\lambda-2 = 0}
+$$
+
+Solving this characteristic equation yields our two eigenvalues:
+
+$$
+\boxed{\lambda = \frac{5}{2} \pm \frac{\sqrt{33}}{2} \approx -0.3723 \text{ or } 5.372}
+$$
+
+
+
+# Problem 6
+Consider points $(1,1), (2,2), (5,5), (-1,-1)$. We want to find a rotation of the space that requires only one dimension to describe the points. Note that these points appear to reside along the line $y=x$ with a $y$-intercept of $0$:
+
+```{r}
+df <- matrix(c(1, 1, 2, 2, 5, 5, -1, -1), ncol = 2, byrow = TRUE)
+plot(df)
+```
+
+By this observation, if we **rotate the points by 45 degrees**, the points will all lie in one dimension. Particularly, if we rotate counter-clockwise by $-45^{\circ}$, the points will lie along the $x$-axis.
+
+Define our rotation matrix to be as follows for $\theta = -45^{\circ}$:
+
+$$
+R = 
+\begin{bmatrix}
+\cos(\theta) & -\sin(\theta) \\
+\sin(\theta) & \cos(\theta)
+\end{bmatrix} =
+\begin{bmatrix}
+\cos(-45^{\circ}) & -\sin(-45^{\circ}) \\
+\sin(-45^{\circ}) & \cos(-45^{\circ})
+\end{bmatrix}
+$$
+
+We rotate the points by multiplying our dataframe by the transpose of the rotation matrix defined above:
+```{r}
+theta <- -45 * (pi / 180)  # Convert to radians.
+
+rot_mat <- matrix(c(cos(theta), -sin(theta),
+                    sin(theta), cos(theta)), 
+                  nrow = 2, byrow = TRUE)
+
+rotated <- round(df %*% t(rot_mat), 4); rotated
+```
+
+Our resulting rotated point matrix is in one dimension, as constructed:
+
+```{r}
+plot(rotated)
+```
+
+
+
+# Problem 7
+We are provided two matrices, which we encode into `R`:
+```{r}
+A <- matrix(c(3,9,12,4,6,0,2,-3,17,-5,3,1,19,19,19,19), nrow = 4, byrow = TRUE)
+B <- matrix(c(132,130,156,210,255,255,255,0,130,132,156,1,130,130,1,9),
+                                                        nrow = 4, byrow = TRUE)
+```
+
+
+## (a) Transpose of $B$.
+```{r}
+t(B)
+```
+
+
+## (b) Product of $AB$.
+```{r}
+A %*% B
+```
+
+
+## (c) Inverse of $A$.
+```{r}
+solve(A)
+```
+
+
+## (d) Determinant of $A$.
+```{r}
+det(A)
+```
+
+
+## (e) $AA^{-1}$.
+```{r}
+A %*% solve(A)
+```
+
+
+## (f) Trace of $B$.
+```{r}
+sum(diag(B))
+```
+
+
+## (g) Trace of $B^{\text{T}}$.
+```{r}
+sum(diag(t(B)))
+```
