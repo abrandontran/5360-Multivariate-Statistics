@@ -1,0 +1,133 @@
+---
+title: "Homework 7: Factor Analysis"
+subtitle: "S&DS 5360 | Multivariate Statistics"
+author: "Brandon Tran (brandon.tran@yale.edu)"
+date: today
+date-format: "MMMM DD, YYYY"
+format: pdf 
+---
+
+
+
+```{r, include = FALSE}
+library(MASS)
+library(dplyr)
+library(ggplot2)
+library(haven)
+library(tidyr)
+library(knitr)
+library(kableExtra)
+library(tidyverse)
+library(corrplot)
+library(EFAtools)
+```
+
+
+
+# Part 1 | Setup & Data Overview
+We continue our work with the Healthy Minds Survey (HMS) data. For
+Factor Analysis, we will select three distinct survey groups
+
+- Depression (`phq9_1` to `phq9_9`): Nine questions on interest, mood, sleep, and energy levels over 2 weeks.
+- Anxiety (`gad7_1` to `gad7_7`): Seven questions on nervousiness, worrying, and restlessness over 2 weeks.
+- Flourishing (`diener1` to `diener8`): Eight questions assessing positive psychological and social well-being.
+- Resilience (`brs_1` to `brs_6`): Six questions measuring a student's ability to cope with stress and adversity. Note that we will need to reverse-score the even questions so that the scale remains consistent (higher score indicates higher resilience).
+
+We omit the code to preprocess the data.
+
+```{r, echo = FALSE, cache = TRUE}
+hms_data <- read_sav("data/hms_data.sav", encoding = 'latin1')
+
+fa_vars <- c(
+  "phq9_1", "phq9_2", "phq9_3", "phq9_4", "phq9_5", "phq9_6", "phq9_7", "phq9_8", "phq9_9",
+  "gad7_1", "gad7_2", "gad7_3", "gad7_4", "gad7_5", "gad7_6", "gad7_7",
+  "diener1", "diener2", "diener3", "diener4", "diener5", "diener6", "diener7", "diener8",
+  "BRS_1", "BRS_2", "BRS_3", "BRS_4", "BRS_5", "BRS_6"
+)
+
+df <- hms_data %>%
+     select(all_of(fa_vars)) %>%
+     drop_na() %>%
+     mutate(
+     BRS_2 = 6 - BRS_2,
+     BRS_4 = 6 - BRS_4,
+     BRS_6 = 6 - BRS_6
+)
+```
+
+
+
+# Part 2 | Correlation Matrix
+To better understand the relationship between our variables (the HMS survey
+questions), we begin by presenting a correlation matrix. We expect corrleation,
+particularly among within-group questions (e.g., different questions in the
+`phq9` depression category should be correlated).
+
+```{r}
+cormat <- cor(df)
+corrplot(cormat, method = 'color', type = 'upper',
+         tl.col = 'black', tl.cex = 0.6,
+         title = 'Correlation Matrix of HMS Indicators',
+         mar = c(0,0,1,0))
+```
+
+As expected, observe our within-scale groupings (the dark blue triangular
+blocks). The questions from `phq9`, `gad7`, and `diener` all exhibit
+intra-group correlations, indicating strong internal consitency within the
+scales. Turning our attention to the larger blue rectangles, these variables
+represent the comorbidity between depression and anxiety indicators (`phq9` and
+`gad7`, respectively). We have previously shown the interconnected relationship
+between these two question groupings.
+
+Finally, we see a large red rectangle emerge between the flourishing (`diener`) 
+and resilience (`BRS`) questions with those of `phq9` and `gad7`. We have 
+previously oberved this inverse relationship (or better said, negative 
+correlation) in the past for the former: positive well-being and flourishing 
+should be inversely related to psychological distress. It makese sense that
+reslience would follow this same relationship.
+
+
+
+# Part 3 | KMO for Suitability of Data for Analysis
+To determine the suitablity of our data for factor analysis, we calculate the
+Kaiser-Meyer-Olkin (KMO) measure of sampling adequacy using the `EFATools`
+package introduced in class.
+
+```{r}
+KMO(as.matrix(df))
+```
+
+As seen above, the overall KMO score for our $30$ variables is "marvellously"
+high at $0.959$. Further, note that the indivual scores for each variable
+exceed $0.91$; thus, there is substantial shared variance among the questions,
+making our data highly suitable for factor extraction.
+
+
+
+# Step 4 | Determine Latent Factors
+Next, to determine the appropriate number of latent factors to use for our 
+analysis, we use both parallel analysis and our traditional scree plot and 
+eigenvalue interpretation from principal components analysis.
+
+```{r, fig.width = 8, fig.height = 6, width.out = '100%', cache = TRUE}
+# Parallel Analysis
+PARALLEL(df)
+
+# PCA with Scree Plot + Eigenvalues
+comp1 <- prcomp(df, scale. = TRUE)
+
+screeplot(comp1, type = 'lines', col = 'red', lwd = 2, pch = 19, cex = 1.2,
+          main = 'Scree Plot of HMS Indicators')
+
+eigenvalues <- comp1$sdev^2
+round(eigenvalues[1:10], 2)
+```
+
+Observe that the PCA-based decision rule suggests 4 factors (this is where the
+real eigenvalues drop below the simulated 95th percentile threshold). Meanwhile,
+SMC and EFA suggest 11 and 7, respectively. We turn to the scree plot, which has
+a distinct elbow at 4 factors. Considering after $4$, our eigenvalues drop
+below $1.0$, as well as the fact that our data come from four distinct
+measurement groups (`PHQ`, `GAD`, etc.), it makes the most sense to proceed with
+$4$ latent factors.
+
