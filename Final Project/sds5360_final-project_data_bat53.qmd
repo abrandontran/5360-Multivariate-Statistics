@@ -1,0 +1,386 @@
+---
+title: "Final Project: Code for Report"
+subtitle: "S&DS 5630 | Multivariate Statistics"
+author: "Brandon Tran (brandon.tran@yale.edu)"
+date: today
+date-format: "MMMM DD, YYYY"
+format: pdf 
+---
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+# Load required libraries
+library(tidyverse)
+library(dplyr)
+library(haven)
+library(corrplot)
+library(MASS)
+library(car)
+library(NbClust)
+library(heplots)
+library(vegan)
+library(PerformanceAnalytics)
+```
+
+
+
+# Variables
+```{r, cache=TRUE}
+# Load Data
+hms_data <- read_sav("data/hms_data.sav", encoding = 'latin1')
+
+symptoms <- c(paste0('phq9_', 1:9), paste0('gad7_', 1:7))
+environment <- c('age', 'lonesc', 'exerc', 'internet_1', 'fincur')
+
+# Data Cleaning
+df <- hms_data %>%
+  mutate(across(c(gender_trans, gender_queer, gender_nonbin, gender_selfID,
+                  sexual_h, sexual_l, sexual_g, sexual_bi, sexual_queer,
+                  sexual_quest, sexual_pan, sexual_asexual),
+                  ~replace_na(., 0))) %>%
+  mutate(
+      trans = (gender_trans == 1 | gender_queer == 1 | gender_nonbin == 1 | 
+               gender_selfID == 1),
+      queer_flag = (sexual_l == 1 | sexual_g == 1 | sexual_bi == 1 | 
+                    sexual_queer == 1 | sexual_quest == 1 | sexual_pan == 1 | 
+                    sexual_asexual == 1),
+      identity_group = case_when(
+          trans ~ "TGNC",
+          !trans & queer_flag ~ "Cis-LGBQ+",
+          !trans & !queer_flag & sexual_h == 1 ~ "Cis-Het",
+          TRUE ~ NA_character_
+      )
+  ) %>%
+  mutate(
+      identity_group = as.factor(identity_group),
+      ther_any = as.factor(ther_any),
+      queer = as.factor(queer_flag),
+      sleep_wknight = as.numeric(sleep_wknight),
+      deprawsc = as.numeric(deprawsc),
+      flourish = as.numeric(flourish)
+  )
+```
+
+
+
+# Descriptive Plots and Transformations
+```{r}
+df %>%
+  dplyr::select(flourish, deprawsc, anx_score, lonesc, ed_sde) %>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Score") %>%
+  ggplot(aes(x = Score)) +
+  geom_histogram(bins = 30, fill = "steelblue", color = "black") +
+  facet_wrap(~ Variable, scales = "free") +
+  theme_minimal() +
+  labs(title = "Histograms of Mental Health Variables",
+       x = "Score", y = "Frequency")
+
+ggsave("Final Project/figures/4.1.1_histograms.pdf", width = 7, height = 5)
+```
+
+```{r}
+pca_data <- df %>% 
+  dplyr::select(flourish, deprawsc, anx_score, lonesc, ed_sde) %>%
+  drop_na()
+
+corr_matrix <- cor(pca_data)
+pdf("Final Project/figures/4.1.2_corrplot.pdf", width = 8, height = 8)
+corrplot.mixed(corr_matrix, lower = "number", upper = "ellipse")
+dev.off()
+```
+
+```{r}
+set.seed(4747)
+pca_plot_sample <- pca_data %>% slice_sample(n = 5000)
+
+pdf("Final Project/figures/4.1.3_matrixplot.pdf", width = 8, height = 8)
+chart.Correlation(pca_plot_sample, histogram = TRUE, pch = 19)
+dev.off()
+```
+
+```{r}
+pdf("Final Project/figures/4.4_q-q.pdf", width = 7, height = 5)
+cqplot(pca_data, main = "Chi-Square Q-Q Plot for Raw Data")
+dev.off()
+```
+
+```{r}
+df_transform <- df %>%
+    mutate(
+        deprawsc_sqrt = sqrt(deprawsc + 0.5),
+        anx_sqrt = sqrt(anx_score + 0.5),
+        flourish_sq = flourish^2
+    )
+
+pca_data_transform <- df_transform %>% 
+  dplyr::select(flourish_sq, deprawsc_sqrt, anx_sqrt, lonesc, ed_sde) %>%
+  drop_na()
+
+pdf("Final Project/figures/4.5_post-transform.pdf", width = 7, height = 5)
+cqplot(pca_data_transform, main = "Chi-Square Q-Q Plot for Transformed Data")
+dev.off()
+```
+
+```{r, echo=FALSE}
+# Original correlation matrix
+corr_matrix_orig <- cor(pca_data, use = "pairwise.complete.obs")
+
+# Transformed correlation matrix
+corr_matrix_trans <- cor(pca_data_transform, use = "pairwise.complete.obs")
+
+# Extract lower triangles for comparison
+lower_tri_idx <- lower.tri(corr_matrix_orig)
+
+comparison_table <- data.frame(
+  Pair = paste(rownames(corr_matrix_trans)[row(corr_matrix_trans)[lower_tri_idx]], 
+               "vs", 
+               colnames(corr_matrix_orig)[col(corr_matrix_orig)[lower_tri_idx]]),
+  Original = corr_matrix_orig[lower_tri_idx],
+  Transformed = corr_matrix_trans[lower_tri_idx]
+)
+
+comparison_table$Change <- comparison_table$Transformed - comparison_table$Original
+```
+
+
+
+# PCA Dimensionality Check
+```{r pca-analysis, message=FALSE, warning=FALSE}
+# 1. Run PCA on the scaled, transformed data
+pca_model <- prcomp(pca_data_transform, center = TRUE, scale. = TRUE)
+
+# 2. Extract Variance & Eigenvalues for Table
+pca_summary <- summary(pca_model)
+eigenvalues <- pca_model$sdev^2
+variance_explained <- pca_summary$importance[2, ] * 100
+cumulative_variance <- pca_summary$importance[3, ] * 100
+
+cat("--- PCA Variance Summary ---\n")
+pca_table <- data.frame(
+  Eigenvalue = round(eigenvalues, 3),
+  Variance_Pct = round(variance_explained, 1),
+  Cumulative_Pct = round(cumulative_variance, 1)
+)
+print(pca_table)
+
+cat("\n--- PCA Loadings (PC1 & PC2) ---\n")
+print(round(pca_model$rotation[, 1:2], 3))
+
+# 3. Generate PCA Biplot
+library(factoextra)
+pdf("Final Project/figures/4.6_pca_biplot.pdf", width = 7, height = 5)
+pca_plot <- fviz_pca_var(pca_model,
+             col.var = "contrib", 
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE,     
+             title = "PCA Biplot: Variable Contributions")
+print(pca_plot)
+dev.off()
+```
+
+
+
+# Ordination
+```{r, message=FALSE, warning=FALSE, results='hide'}
+# 1. Subset Data for Ordination
+# (Sampling is required for computational feasibility and to avoid overplotting)
+set.seed(4747)
+df_subset <- df %>% 
+  dplyr::select(all_of(symptoms), all_of(environment)) %>%
+  drop_na() %>%
+  sample_n(500)
+
+hms_symptoms_subset <- df_subset %>% dplyr::select(all_of(symptoms))
+hms_env_subset <- df_subset %>% dplyr::select(all_of(environment))
+
+# 2. Correspondence Analysis (CA)
+hms_ca <- cca(hms_symptoms_subset)
+
+pdf("Final Project/figures/5.1_ca_plot.pdf", width = 7, height = 5)
+plot(hms_ca, choices = c(1, 2), type = "n", 
+     main = "CA of Symptoms (Dimensions 1 & 2)")
+points(hms_ca, display = "sites", col = "lightgrey", pch = 16, cex = 0.5)
+text(hms_ca, display = "species", col = "blue", cex = 1, font = 2)
+dev.off()
+
+# 3. Non-Metric Multidimensional Scaling (NMDS)
+hms_nmds1 <- metaMDS(hms_symptoms_subset, distance = "bray", k = 1, trymax = 50)
+hms_nmds2 <- metaMDS(hms_symptoms_subset, distance = "bray", k = 2, trymax = 50)
+hms_nmds3 <- metaMDS(hms_symptoms_subset, distance = "bray", k = 3, trymax = 50)
+
+pdf("Final Project/figures/5.1_nmds_screeplot.pdf", width = 7, height = 5)
+stress_1d <- hms_nmds1$stress
+stress_2d <- hms_nmds2$stress
+stress_3d <- hms_nmds3$stress
+
+dimensions <- c(1, 2, 3)
+stress_values <- c(stress_1d, stress_2d, stress_3d)
+
+plot(dimensions, stress_values, type = "b", pch = 19, col = "blue", lwd = 2,
+     xlab = "Number of Dimensions (k)", ylab = "Stress",
+     main = "NMDS Scree Plot for HMS Symptoms",
+     ylim = c(0, max(stress_values) + 0.05), xaxt = "n")
+axis(1, at = c(1, 2, 3))
+abline(h = 0.20, col = "red", lty = 2)
+text(2.5, 0.21, "Acceptable Threshold (0.20)", col = "red", cex = 0.8)
+dev.off()
+
+# 4. Environmental Vectors Overlay (Envfit)
+fit_env <- envfit(hms_nmds2, hms_env_subset, permutations = 999)
+
+pdf("Final Project/figures/5.1_nmds_envfit.pdf", width = 7, height = 5)
+plot(hms_nmds2, type = "n", main = "NMDS with Environmental Vectors")
+points(hms_nmds2, display = "sites", col = "lightgrey", pch = 16, cex = 0.5)
+text(hms_nmds2, display = "species", col = "blue", cex = 0.9, font = 2)
+plot(fit_env, col = "red", lwd = 2)
+dev.off()
+
+# 5. Non-Linear GAM Surface Wireplot (Ordisurf)
+pdf("Final Project/figures/5.1_nmds_ordisurf.pdf", width = 7, height = 5)
+plot(hms_nmds2, type = "n", main = "NMDS Wireplot: Loneliness Gradient")
+points(hms_nmds2, display = "sites", col = "lightgrey", pch = 16, cex = 0.5)
+text(hms_nmds2, display = "species", col = "blue", cex = 0.9, font = 2)
+surf_lone <- ordisurf(hms_nmds2, hms_env_subset$lonesc, add = TRUE,
+                      col = "darkgreen", lwd = 2)
+dev.off()
+```
+
+
+
+# Two-Way Manova
+```{r manova-analysis, message=FALSE, warning=FALSE}
+# 1. Subset Data for MANOVA
+df_manova <- df %>% 
+  dplyr::select(deprawsc, flourish, ther_any, queer, sleep_wknight) %>%
+  drop_na()
+
+# 2. Main Effects & Interaction (Type III MANOVA)
+manova_fit <- lm(cbind(deprawsc, flourish) ~ ther_any * queer, data = df_manova)
+cat("--- Type III MANOVA ---\n")
+print(Manova(manova_fit, type = 'III'))
+
+# Univariate ANOVA (Generates F-Stats for Table 3 / tab:manova_main_effects)
+cat("\n--- Univariate ANOVAs ---\n")
+summary.aov(manova_fit)
+
+# 3. Estimated Marginal Means (Contrasts)
+library(emmeans)
+emm_queer <- emmeans(manova_fit, ~ queer | rep.meas)
+emm_ther <- emmeans(manova_fit, ~ ther_any | rep.meas)
+
+cat("\n--- Queer Contrasts ---\n")
+summary(pairs(emm_queer), adjust = 'none')
+
+cat("\n--- Therapy Contrasts ---\n")
+summary(pairs(emm_ther), adjust = 'none')
+
+# 4. Covariate Integration: Sleep
+model_cov <- lm(cbind(deprawsc, flourish) ~ ther_any + queer + sleep_wknight, data = df_manova)
+cat("\n--- MANOVA with Sleep Covariate ---\n")
+print(Manova(model_cov, type = "III"))
+
+# 5. Evaluate Assumptions (Chi-Square Q-Q Plot)
+# Note: Using model_cov as evaluated in the write-up
+pdf("Final Project/figures/5.2_manova_qq.pdf", width = 7, height = 5)
+cqplot(model_cov, main = "Chi-Square Q-Q Plot: Multivariate Normality Check")
+dev.off()
+
+# 6. Non-Parametric Validation (MRPP)
+# Sampling is required for computational feasibility
+set.seed(4747)
+df_subset_mrpp <- df_manova[sample(nrow(df_manova), 2000), ]
+dist_matrix <- vegdist(cbind(df_subset_mrpp$deprawsc, df_subset_mrpp$flourish), method = 'euclidean')
+
+cat("\n--- MRPP: Sexual Orientation ---\n")
+mrpp(dist_matrix, grouping = df_subset_mrpp$queer)
+
+cat("\n--- MRPP: Therapy Utilization ---\n")
+mrpp(dist_matrix, grouping = df_subset_mrpp$ther_any)
+```
+
+# Method 3: Discriminant Analysis
+```{r da-analysis, message=FALSE, warning=FALSE}
+# 1. Subset Data for DA
+df_da <- df %>%
+  dplyr::select(identity_group, flourish, deprawsc, anx_score, lonesc, ed_sde) %>%
+  drop_na() %>%
+  filter(identity_group %in% c("Cis-Het", "Cis-LGBQ+", "TGNC")) %>%
+  mutate(identity_group = droplevels(identity_group))
+
+# 2. Box's M Test
+library(heplots)
+cat("--- Box's M Test ---\n")
+boxM(df_da[, -1], df_da$identity_group)
+
+# 3. Model Comparison (CV = TRUE)
+library(MASS)
+lda_cv <- lda(identity_group ~ ., data = df_da, CV = TRUE)
+qda_cv <- qda(identity_group ~ ., data = df_da, CV = TRUE)
+
+acc_lda <- mean(lda_cv$class == df_da$identity_group)
+acc_qda <- mean(qda_cv$class == df_da$identity_group)
+
+cat("\n--- Classification Accuracy ---\n")
+cat("LDA Accuracy:", round(acc_lda, 4), "\n")
+cat("QDA Accuracy:", round(acc_qda, 4), "\n")
+
+# 4. Stepwise Selection
+library(klaR)
+cat("\n--- Stepwise Discriminant Analysis ---\n")
+# stepclass uses cross-validation to select variables.
+# Note: as.data.frame() is required here because klaR does not support tibbles!
+step_da <- stepclass(identity_group ~ ., data = as.data.frame(df_da), method = "lda", direction = "both")
+print(step_da)
+
+# 5. Final LDA Model (for coefficients and trace)
+lda_model <- lda(identity_group ~ ., data = df_da)
+cat("\n--- Final LDA Model Summary ---\n")
+print(lda_model)
+
+# Calculate Standardized Coefficients (Scaling * diag(sqrt(diag(cov(data)))))
+sdev <- apply(df_da[, -1], 2, sd)
+std_coef <- diag(sdev) %*% lda_model$scaling
+rownames(std_coef) <- colnames(df_da)[-1]
+cat("\n--- Standardized Coefficients ---\n")
+print(std_coef)
+
+# 6. Confusion Matrix & Recall
+cat("\n--- Confusion Matrix (LDA CV) ---\n")
+conf_matrix <- table(True = df_da$identity_group, Predicted = lda_cv$class)
+print(conf_matrix)
+
+cat("\n--- Class Recall (Sensitivity) ---\n")
+recall <- diag(conf_matrix) / rowSums(conf_matrix)
+print(round(recall, 4))
+
+# 7. Visualizations: Score Plot
+# Get predictions to plot LD1 and LD2
+lda_predict <- predict(lda_model)
+df_lda_plot <- data.frame(df_da, lda_predict$x)
+
+library(ggplot2)
+pdf("Final Project/figures/5.3_lda_scoreplot.pdf", width = 7, height = 5)
+score_plot <- ggplot(df_lda_plot, aes(x = LD1, y = LD2, color = identity_group)) +
+  geom_point(alpha = 0.3, size = 0.8) +
+  stat_ellipse(linewidth = 1.2) +
+  scale_color_manual(values = c("Cis-Het" = "#1b9e77", "Cis-LGBQ+" = "#d95f02", "TGNC" = "#7570b3")) +
+  theme_minimal() +
+  labs(title = "LDA Score Plot: Identity Groups", 
+       x = "Linear Discriminant 1", y = "Linear Discriminant 2", color = "Identity Group")
+print(score_plot)
+dev.off()
+
+# 8. Visualizations: Partimat Plot
+# Note: Partimat is very computationally heavy. We take a stratified sample to make compilation fast and the plot readable.
+set.seed(4747)
+df_da_sample <- df_da %>% 
+  group_by(identity_group) %>% 
+  sample_n(150) %>% 
+  ungroup()
+
+pdf("Final Project/figures/5.3_lda_partimat.pdf", width = 8, height = 8)
+partimat(identity_group ~ flourish + deprawsc + anx_score + lonesc, 
+         data = df_da_sample, method = "lda", 
+         image.colors = c("lightgreen", "lightcoral", "lightblue"))
+dev.off()
