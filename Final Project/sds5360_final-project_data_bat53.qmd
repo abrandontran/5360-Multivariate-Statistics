@@ -297,6 +297,27 @@ mrpp(dist_matrix, grouping = df_subset_mrpp$queer)
 
 cat("\n--- MRPP: Therapy Utilization ---\n")
 mrpp(dist_matrix, grouping = df_subset_mrpp$ther_any)
+
+# Interaction Plot (Multivariate Contrasts)
+library(emmeans)
+library(ggplot2)
+
+# Generate Interaction Plot for both responses
+emmip(manova_fit, queer ~ ther_any | rep.meas, CIs = TRUE) +
+  theme_minimal() +
+  scale_color_manual(values = c("FALSE" = "#1b9e77", "TRUE" = "#d95f02"), 
+                     labels = c("Heterosexual", "Queer")) +
+  labs(title = "Interaction Plot: Estimated Marginal Means",
+       subtitle = "Visualizing the Mental Health Gap across Identity and Therapy",
+       y = "Estimated Marginal Mean (Score)", 
+       x = "Therapy Utilization (0 = No, 1 = Yes)",
+       color = "Sexual Orientation") +
+  theme(legend.position = "bottom")
+
+pdf("Final Project/figures/5.2_manova_contrasts.pdf", width = 9, height = 5)
+emmip(manova_fit, queer ~ ther_any | rep.meas, CIs = TRUE) +
+  theme_minimal() + labs(title = "Interaction Plot of Estimated Marginal Means")
+dev.off()
 ```
 
 # Method 3: Discriminant Analysis
